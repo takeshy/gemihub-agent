@@ -75,6 +75,15 @@ test("read actions return copies and area filters use the registry", () => {
   assert.equal(page.listShops()[0].pageUrl, shops[0].pageUrl);
 });
 
+test("no-preference spellings are not searched as literal cuisines or places", () => {
+  const { page } = arrange();
+  for (const value of ["", "指定なし", "指定無し", "未指定", "おまかせ", "どこでも", "何でも", "Any", "none"]) {
+    assert.equal(page.listShops({ area: value, cuisine: value }).length, shops.length, value);
+    assert.deepEqual(page.listShops({ area: value, cuisine: "中華" }).map(shop => shop.id), ["kanton-ryu"]);
+  }
+  assert.deepEqual(page.listShops({ area: "存在しない", cuisine: "指定なし" }), []);
+});
+
 test("manual partial changes invalidate old results and pending navigation", () => {
   const { page, visited } = arrange();
   page.showCandidates({ candidates: [candidate()], expectedVersion: page.version });

@@ -8,14 +8,15 @@ const version = integer("同じターンに読んだ状態または条件更新�
 export function registerActions(actions) {
   const register = (name, description, effect, properties, required, execute) => actions.register({ name, description, effect,
     inputSchema: { type: "object", additionalProperties: false, properties, required }, execute });
-  register("get_finder_state", "日本時間の今日と曜日、予約条件・比較結果・versionと、確認済みのジャンル/場所、画面内に開いている店openShop（なければnull）を読む。nullの希望は未確認。", "read", {}, [], () => ({ ...App.page.getState(), searchPreferences: App.inquiries?.preferences || { cuisine: null, area: null }, openShop: App.shopFrame?.shop ? { id: App.shopFrame.shop.id, name: App.shopFrame.shop.name } : null }));
+  register("get_finder_state", "日本時間の今日と曜日、予約条件・比較結果・version、ジャンル/場所、確認中の範囲inquiryBatch、画面内に開いている店openShopを読む。nullの希望は未指定。候補14店以下なら希望の追加質問は不要。", "read", {}, [], () => ({ ...App.page.getState(), searchPreferences: App.inquiries?.preferences || { cuisine: null, area: null }, inquiryBatch: App.inquiries?.batchState() || null, openShop: App.shopFrame?.shop ? { id: App.shopFrame.shop.id, name: App.shopFrame.shop.name } : null }));
   register("open_shop", "利用者が選んだ1店のページを、この画面内に開く。有効な検索条件（日時・人数・コース要否・予算・食材）はお店のページへ渡す。相談と予約は利用者がお店のページで行う。予約はしない。", "write",
     { shopId }, ["shopId"], args => App.shopFrame?.open(args.shopId) || { ok: false, reason: "準備ができていません。" });
   register("list_registered_shops", "登録店のid・店名・エリア・料理・pageUrl・networkUrl・networkToolを読む。空席や価格は含まない。", "read",
     { area: string("任意の場所。新宿、東京、横浜など。空文字は指定なし。", 80), cuisine: string("任意のジャンル。中華、イタリアン、和食など。空文字は指定なし。", 80) }, [], args => App.page.listShops(args));
-  register("confirm_shop_inquiries", "ジャンル・場所と日時人数がそろったら使う。親の情報で絞った確認先の件数をチャットに示し、一度だけ空席・メニューを確認するか聞く。approved:trueの店だけ空席・メニューを確認する。", "write", {
-    cuisine: string("利用者に確認した希望ジャンル。明示的に指定なし・おまかせなら空文字。", 80),
-    area: string("利用者に確認した場所。明示的に指定なし・どこでもなら空文字。", 80), expectedVersion: version,
+  register("confirm_shop_inquiries", "日時人数がそろったら使う。候補15店以上のときだけ未指定のジャンル・場所を聞く。全候補数と今回確認する最大4店を表示する。approved:trueのshopsだけ確認し、続きは利用者の次の発話後にnextOffsetで進む。", "write", {
+    cuisine: string("希望ジャンル。未指定なら空文字。候補15店以上では未確認の希望を聞いてから進む。", 80),
+    area: string("希望の場所。未指定なら空文字。指定なし・どこでもでも進められる。", 80), expectedVersion: version,
+    offset: integer("最初は0。続きの確認を利用者が希望したらinquiryBatch.nextOffset。条件変更後は0に戻す。", Number.MAX_SAFE_INTEGER),
   }, ["cuisine", "area", "expectedVersion"], args => App.inquiries?.confirm(args) || { ok: false, reason: "空席・メニューの確認の準備ができていません。" });
   register("set_reservation_conditions", "利用者がチャットで指定した予約条件を保存し、古い比較結果を消す。予約は行わない。更新後の条件とversionを返す。", "write", {
     date: string("日本時間の実在する日付 YYYY-MM-DD。今日の日付はget_finder_stateから読む。", 10),

@@ -53,7 +53,10 @@ export class AssistantMount {
     });
   }
 
-  static GREETING = "行きたい料理のジャンルや場所はありますか？中華・イタリアン・和食など。日時と人数も教えてください。おまかせでも大丈夫です。候補を絞り、空席・メニューを確認するお店の数を先にお伝えします。";
+  static get GREETING() {
+    return (App.page.shops.length >= 15 ? "行きたい料理のジャンルや場所はありますか？おまかせでも大丈夫です。" : "")
+      + "希望の日時と人数を教えてください。空席・メニューを確認するお店の数を先にお伝えします。";
+  }
 
   /**
    * The confirmation dialog's words for each irreversible action. Name each button after

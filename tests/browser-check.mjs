@@ -102,6 +102,7 @@ try {
   await page.locator("#ns-apply").click();
   await page.waitForFunction(() => window.__nsweb?.engine?.byokKey === "fixture-only-key");
   assert.equal(await page.locator("#ai-setup-dialog").isVisible(), false);
+  assert.doesNotMatch(await page.locator("#ns-msgs .ns-msg.bot").first().textContent(), /ジャンル|場所/);
   await page.locator("#ns-input").fill(`${date} 19時から12名、コース希望、1人5000円以内、えびを避けたい。ジャンルと場所は指定なし。相談用メモ：このメモは移動先へ渡さない`);
   await page.locator("#ns-send").click();
   await page.waitForFunction(() => document.querySelector("#ns-msgs").textContent.includes("条件を保存しました"));
@@ -188,7 +189,9 @@ try {
     message.textContent = "ジャンルも場所も指定なしでお願いします。";
     document.getElementById("ns-msgs").append(message);
   });
-  await beginInquiry("", "");
+  const unrestrictedShops = await page.evaluate(() => window.finderTest.call("website_list_registered_shops", { cuisine: "指定なし", area: "指定なし" }));
+  assert.equal(unrestrictedShops.result.length, 3);
+  await beginInquiry("指定なし", "指定なし");
   assert.match(await page.locator(".finder-inquiry").last().textContent(), /3店のAIで空席・メニューを確認/);
   assert.equal(shopRequests.length, afterFiltered);
   await page.getByRole("button", { name: "確認する", exact: true }).click();
@@ -257,6 +260,30 @@ try {
   await page.setViewportSize({ width: 390, height: 844 });
   assert.equal(await page.evaluate(() => document.documentElement.scrollWidth > innerWidth), false, "mobile horizontal overflow");
   await page.screenshot({ path: "test-results/finder-mobile.png", fullPage: true });
+  // A larger registry still shows the total and approves only the current four.
+  const requestsBeforeBatches = shopRequests.length;
+  await page.evaluate(async date => {
+    const { FinderPage } = await import("/finder.js");
+    const { ShopInquiries, reviewShopInquiries } = await import("/inquiries.js");
+    const registry = Array.from({ length: 14 }, (_, i) => ({ ...window.finderTest.App.page.shops[i % 3], id: `batch-${i}`, name: `登録店${i + 1}` }));
+    const finder = new FinderPage(registry);
+    finder.setConditions({ date, time: "19:00", partySize: 2 });
+    const inquiries = new ShopInquiries(() => finder, reviewShopInquiries);
+    window.batchTest = { finder, inquiries, pending: inquiries.confirm({ cuisine: "", area: "", expectedVersion: finder.version }) };
+  }, date);
+  assert.match(await page.locator(".finder-inquiry").last().textContent(), /候補は14店です。まず4店/);
+  assert.equal(await page.evaluate(() => document.documentElement.scrollWidth > innerWidth), false);
+  await page.getByRole("button", { name: "確認する", exact: true }).click();
+  assert.equal((await page.evaluate(() => window.batchTest.pending)).nextOffset, 4);
+  await page.evaluate(() => {
+    const { finder, inquiries } = window.batchTest;
+    window.batchTest.pending = inquiries.confirm({ cuisine: "", area: "", expectedVersion: finder.version, offset: 4 });
+  });
+  assert.match(await page.locator(".finder-inquiry").last().textContent(), /候補は14店です。続きの4店/);
+  await page.getByRole("button", { name: "確認する", exact: true }).click();
+  const nextBatch = await page.evaluate(() => window.batchTest.pending);
+  assert.deepEqual(nextBatch.shops.map(shop => shop.id), ["batch-4", "batch-5", "batch-6", "batch-7"]);
+  assert.equal(shopRequests.length, requestsBeforeBatches);
   await currentResults.locator(".candidate-button").first().click();
   await page.getByRole("button", { name: "条件を引き継いで移動", exact: true }).click();
   await page.waitForURL("http://127.0.0.1:3000/s/akari/reserve#**");

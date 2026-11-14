@@ -12,6 +12,12 @@ const object = value => value && typeof value === "object" && !Array.isArray(val
 const text = (value, max) => typeof value === "string" && value.length <= max;
 const identifier = value => text(value, 80) && /^[a-zA-Z0-9][a-zA-Z0-9_-]*$/.test(value);
 
+// Tool calls may spell out "指定なし" instead of sending an empty string.
+export function normalizeShopFilter(value = "") {
+  const normalized = value.normalize("NFKC").toLowerCase().replace(/\s/g, "");
+  return /^(?:指定なし|指定無し|未指定|なし|おまかせ|どこでも|なんでも|何でも|こだわりなし|any|none|all|nopreference)$/.test(normalized) ? "" : value.trim();
+}
+
 export function japanNow(now = new Date()) {
   const parts = Object.fromEntries(new Intl.DateTimeFormat("en-CA", {
     timeZone: "Asia/Tokyo", year: "numeric", month: "2-digit", day: "2-digit",
@@ -72,8 +78,8 @@ export class FinderPage {
 
   listShops({ area = "", cuisine = "" } = {}) {
     const normalize = value => value.normalize("NFKC").toLowerCase().replace(/\s/g, "");
-    const place = normalize(area);
-    const genre = normalize(cuisine).replace(/料理$/, "");
+    const place = normalize(normalizeShopFilter(area));
+    const genre = normalize(normalizeShopFilter(cuisine)).replace(/料理$/, "");
     return clone(this.shops.filter(shop => (!place || normalize(shop.area).includes(place))
       && (!genre || normalize(shop.cuisine).includes(genre))));
   }

@@ -11,18 +11,99 @@ function arrange(review = async () => true, registry = shops, message = "ジャ�
   return { page, inquiries, confirm: (extra = {}) => inquiries.confirm({ cuisine: "", area: "", expectedVersion: page.version, ...extra }) };
 }
 
-test("missing genre and place cannot silently become unrestricted inquiries", async () => {
+const registryOf = count => Array.from({ length: count }, (_, index) => ({
+  ...shops[index % shops.length], id: `shop-${index}`, name: `登録店${index + 1}`,
+  networkUrl: `http://127.0.0.1:3000/s/shop-${index}/agent/reservation_concierge`,
+}));
+
+test("fewer than 15 candidates proceed without asking for genre or place", async () => {
   let shown = false;
   const { inquiries, confirm } = arrange(async () => { shown = true; return true; }, shops, "明日の18時に2人、席だけで探して");
   const result = await confirm();
-  assert.equal(result.ok, false);
-  assert.match(result.reason, /ジャンルと場所を先に/);
-  assert.equal(shown, false);
-  assert.equal(inquiries.activePlan(), null);
-  assert.deepEqual(inquiries.preferences, { cuisine: null, area: null });
-  inquiries.getUserMessage = () => "おまかせ・どこでも";
-  assert.equal((await confirm()).count, 3);
+  assert.equal(result.approved, true);
+  assert.equal(result.count, 3);
   assert.equal(shown, true);
+  assert.deepEqual(inquiries.preferences, { cuisine: null, area: null });
+});
+
+test("14 candidates start in batches but 15 ask only for missing preferences", async () => {
+  for (const count of [14, 15]) {
+    let shown = false;
+    const { inquiries, confirm } = arrange(async () => { shown = true; return true; }, registryOf(count), "明日の18時に2人");
+    const result = await confirm();
+    assert.equal(shown, count === 14);
+    if (count === 14) {
+      assert.equal(result.approved, true);
+      assert.equal(result.count, 4);
+      assert.equal(result.totalCount, 14);
+    } else {
+      assert.equal(result.needsPreferences, true);
+      assert.equal(result.count, 15);
+      assert.deepEqual(result.missingPreferences, ["cuisine", "area"]);
+      assert.equal(inquiries.activePlan(), null);
+      inquiries.getUserMessage = () => "おまかせ・どこでも";
+      assert.equal((await confirm()).approved, true);
+    }
+  }
+});
+
+test("the threshold uses filtered candidates and does not ask the other preference below 15", async () => {
+  const { inquiries, confirm } = arrange(undefined, registryOf(30), "中華で探して");
+  const filtered = await confirm({ cuisine: "中華" });
+  assert.equal(filtered.approved, true);
+  assert.equal(filtered.totalCount, 10);
+  assert.equal(filtered.count, 4);
+  assert.deepEqual(inquiries.preferences, { cuisine: "中華", area: null });
+  const { confirm: large } = arrange(undefined, registryOf(45), "中華で探して");
+  const result = await large({ cuisine: "中華" });
+  assert.equal(result.needsPreferences, true);
+  assert.deepEqual(result.missingPreferences, ["area"]);
+});
+
+test("literal unspecified tool arguments count all registered shops instead of zero", async () => {
+  const { confirm } = arrange(undefined, shops, "ジャンル・場所どちらも指定なし");
+  const result = await confirm({ cuisine: "指定なし", area: "指定なし" });
+  assert.equal(result.approved, true);
+  assert.equal(result.totalCount, shops.length);
+  assert.deepEqual(result.shops.map(shop => shop.id), shops.map(shop => shop.id));
+  await confirm({ cuisine: "中華", area: "横浜" });
+  assert.equal((await confirm({ cuisine: "おまかせ", area: "指定なし" })).count, shops.length);
+});
+
+test("continuation visits every candidate in groups of four with exact batch scope", async () => {
+  const registry = registryOf(14);
+  const plans = [];
+  const { page, inquiries, confirm } = arrange(async plan => { plans.push(plan); return true; }, registry, "明日の18時に2人");
+  const seen = [];
+  for (const offset of [0, 4, 8, 12]) {
+    const result = await confirm({ offset });
+    assert.equal(result.approved, true);
+    assert.equal(result.totalCount, 14);
+    assert.equal(result.count, Math.min(4, 14 - offset));
+    assert.equal(result.nextOffset, offset === 12 ? null : offset + 4);
+    assert.equal(result.hasMore, offset !== 12);
+    assert.equal(inquiries.batchState().offset, offset);
+    for (const shop of registry) {
+      assert.equal(inquiries.canContactNetwork(shop.networkUrl), result.shops.some(item => item.id === shop.id));
+    }
+    seen.push(...result.shops.map(shop => shop.id));
+    assert.equal(page.candidates.length, offset ? 1 : 0);
+    page.showCandidates({ candidates: [{ shopId: registry[0].id, status: "unknown", summary: "確認済みの結果" }], expectedVersion: page.version });
+  }
+  assert.deepEqual(seen, registry.map(shop => shop.id));
+  assert.equal(plans.length, 4);
+  assert.equal((await confirm({ offset: 16 })).ok, false);
+});
+
+test("a continuation cannot skip batches or reuse a changed search", async () => {
+  for (const change of ["skip", "conditions", "preferences", "reset"]) {
+    const { page, inquiries, confirm } = arrange(undefined, registryOf(14));
+    assert.equal((await confirm()).approved, true);
+    if (change === "conditions") page.setConditions({ ...page.conditions, partySize: 2 });
+    if (change === "reset") inquiries.reset();
+    assert.equal((await confirm({ offset: change === "skip" ? 8 : 4, ...(change === "preferences" ? { cuisine: "中華" } : {}) })).ok, false);
+    assert.equal(inquiries.activePlan(), null);
+  }
 });
 
 test("the count and exact targets come from parent metadata before any connection", async () => {

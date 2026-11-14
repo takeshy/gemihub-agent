@@ -1,4 +1,7 @@
-import { allergenLabel, COURSE_LABELS } from "./finder.js";
+import { allergenLabel, COURSE_LABELS, normalizeShopFilter } from "./finder.js";
+
+const BATCH_SIZE = 4;
+const ASK_PREFERENCES_AT = 15;
 
 // Approval belongs to one search and its exact destinations, never an entire host
 // forever. The runtime remains responsible for fetching and executing the peers.
@@ -22,30 +25,39 @@ export class ShopInquiries {
     this.preferences = { cuisine: null, area: null };
   }
 
-  async confirm({ cuisine, area, expectedVersion } = {}) {
+  async confirm({ cuisine, area, expectedVersion, offset = 0 } = {}) {
     if (this.pending) return { ok: false, reason: "確認先の確認に回答してください。" };
     const page = this.getPage();
     const state = page.getState();
     if (expectedVersion !== state.version || !state.valid) return { ok: false, reason: "最新の日時・人数を確認してください。" };
     if (![cuisine, area].every(value => typeof value === "string" && value.length <= 80)) {
-      return { ok: false, reason: "希望のジャンルと場所を聞いてください。指定なしの場合は空文字を使ってください。" };
+      return { ok: false, reason: "ジャンル・場所は文字列で渡してください。指定なしの場合は空文字を使ってください。" };
     }
+    const previous = this.activePlan();
     this.approved = null;
+    if (!Number.isInteger(offset) || offset < 0) return { ok: false, reason: "確認する範囲が正しくありません。" };
     const text = this.getUserMessage().normalize("NFKC").replace(/\s/g, "");
     const any = /^(おまかせ|指定なし)(で|です|お願いします|でお願いします|でいいです|で良いです)?[。.!！]*$/.test(text)
       || /^(?:おまかせ[・、,/]?どこでも|どこでも[・、,/]?おまかせ)(?:で(?:す|お願いします|いいです|良いです)|いいです|良いです)?[。.!！]*$/.test(text);
     const unrestricted = field => any || new RegExp(`${field === "cuisine" ? "(?:ジャンル|料理|食事)" : "(?:場所|地域|エリア)"}.{0,12}(?:指定なし|おまかせ|何でも|なんでも|どこでも|問わない|こだわり.{0,3}(?:ない|なし|ありません))`).test(text);
-    const resolve = (field, value) => value.trim() || (unrestricted(field) ? "" : this.preferences[field]);
+    const resolve = (field, value) => value.trim() ? normalizeShopFilter(value) : (unrestricted(field) ? "" : this.preferences[field]);
     const preferences = { cuisine: resolve("cuisine", cuisine), area: resolve("area", area) };
-    if (Object.values(preferences).some(value => value === null)) {
-      return { ok: false, reason: "希望のジャンルと場所を先にチャットで聞き、返答を待ってください。未確認を指定なしにしないでください。" };
-    }
+    const matches = page.listShops({ cuisine: preferences.cuisine ?? "", area: preferences.area ?? "" });
     this.preferences = preferences;
-    page.clearCandidates();
-    const shops = page.listShops(this.preferences);
-    if (!shops.length) return { ok: false, count: 0, reason: "そのジャンル・場所に合う登録店はありません。希望を変えるか確認してください。" };
-    if (shops.length > 4) return { ok: false, count: shops.length, reason: "一度に確認できるのは4店です。ジャンルや場所で絞ってください。" };
-    const plan = { ...this.preferences, expectedVersion, conditions: state.conditions, shops, count: shops.length };
+    if (matches.length >= ASK_PREFERENCES_AT && Object.values(preferences).some(value => value === null)) {
+      return { ok: false, count: matches.length, needsPreferences: true,
+        missingPreferences: Object.keys(preferences).filter(field => preferences[field] === null),
+        reason: "候補が15店以上あります。未指定のジャンル・場所だけをチャットで聞いてください。指定なしでも進められます。" };
+    }
+    if (!matches.length) return { ok: false, count: 0, reason: "そのジャンル・場所に合う登録店はありません。希望を変えるか確認してください。" };
+    if (offset && (!previous || previous.nextOffset !== offset || previous.cuisine !== preferences.cuisine || previous.area !== preferences.area)) {
+      return { ok: false, reason: "条件が変わったか、続きがありません。offset=0で件数を確認し直してください。" };
+    }
+    if (!offset) page.clearCandidates();
+    const shops = matches.slice(offset, offset + BATCH_SIZE);
+    const nextOffset = offset + shops.length < matches.length ? offset + shops.length : null;
+    const plan = { ...preferences, expectedVersion, conditions: state.conditions, shops, count: shops.length,
+      totalCount: matches.length, offset, nextOffset, hasMore: nextOffset !== null };
     const controller = new AbortController();
     this.pending = controller;
     try {
@@ -55,7 +67,7 @@ export class ShopInquiries {
       }
       if (accepted !== true) return { ok: true, approved: false, count: plan.count, reason: "空席・メニューの確認は行っていません。希望を確認してください。" };
       this.approved = plan;
-      return { ok: true, approved: true, count: plan.count, shops, version: expectedVersion };
+      return { ok: true, approved: true, ...this.batchState(), shops, version: expectedVersion };
     } finally {
       if (this.pending === controller) this.pending = null;
     }
@@ -63,6 +75,13 @@ export class ShopInquiries {
 
   activePlan() {
     return this.approved?.expectedVersion === this.getPage().version ? this.approved : null;
+  }
+
+  batchState() {
+    const plan = this.activePlan();
+    if (!plan) return null;
+    const { count, totalCount, offset, nextOffset, hasMore } = plan;
+    return { count, totalCount, offset, nextOffset, hasMore };
   }
 
   canContactNetwork(url) {
@@ -87,7 +106,7 @@ export function installInquiryPolicy(engine, inquiries) {
   engine.onConsent = info => inquiries.decision(info);
   const resolveRemote = engine.resolveRemote.bind(engine);
   engine.resolveRemote = (url, ...args) => {
-    if (!inquiries.canContactNetwork(url)) throw new Error("先にジャンル・場所と確認先の件数を確認してください。");
+    if (!inquiries.canContactNetwork(url)) throw new Error("先に確認先の件数を確認してください。");
     return resolveRemote(url, ...args);
   };
   const resolveMcp = engine.resolveMcp.bind(engine);
@@ -106,7 +125,9 @@ export function reviewShopInquiries(plan, signal) {
     card.setAttribute("aria-label", "確認先の確認");
     const title = document.createElement("p");
     title.className = "finder-inquiry-title";
-    title.textContent = `${plan.count}店のAIで空席・メニューを確認しますか？`;
+    title.textContent = plan.totalCount > plan.count
+      ? `候補は${plan.totalCount}店です。${plan.offset ? "続きの" : "まず"}${plan.count}店のAIで空席・メニューを確認しますか？`
+      : `${plan.count}店のAIで空席・メニューを確認しますか？`;
     const summary = document.createElement("p");
     const c = plan.conditions;
     summary.textContent = `${plan.cuisine || "ジャンル指定なし"} / ${plan.area || "場所指定なし"} · ${c.date} ${c.time} / ${c.partySize}名 / ${COURSE_LABELS[c.course]}`

@@ -570,3 +570,31 @@ footer p {
 .assistant-chat-menu > summary:hover { background: var(--paper); }
 .assistant-chat-menu > summary:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
 .assistant-chat-menu > button { position: absolute; right: 0; top: calc(100% + 6px); z-index: 2; width: max-content; min-width: 160px; padding: 10px 14px; border: 1px solid var(--line); border-radius: 8px; background: #fff; color: var(--ink); box-shadow: 0 4px 16px #0002; text-align: left; font: 14px/1.5 system-ui, sans-serif; cursor: pointer; }
+
+/* While visiting a shop, preserve the search off screen and show the shop itself. */
+.shop-view-header { position:fixed; inset:0 0 auto; z-index:40; height:56px; display:flex; align-items:center; gap:16px; padding:0 16px; border-bottom:1px solid var(--line); background:var(--paper); }
+.shop-view-header[hidden] { display:none; }
+.shop-view-header button { border:0; background:transparent; color:var(--accent); font:inherit; cursor:pointer; }
+.shop-view-header span { display:none; }
+body[data-shop-view="open"] > :is(.site-header,footer,.skip-link),
+body[data-shop-view="open"] #main > :not(#assistant),
+body[data-shop-view="open"] #assistant > :not(#assistant-layout),
+body[data-shop-view="open"] #agent-app > :not(#ai-setup-dialog) { display:none !important; }
+body[data-shop-view="open"] #agent-app { display:contents; }
+body[data-shop-view="open"] #assistant { margin:0; padding:0; border:0; }
+body[data-shop-view="open"] .assistant-layout { display:block; }
+body[data-shop-view="open"] #shop-page-panel { position:fixed; inset:56px 0 0; display:flex; gap:0; background:#fff; }
+body[data-shop-view="open"] #shop-page-frame { width:100%; height:100%; min-height:0; border:0; border-radius:0; flex:1; }
+body[data-shop-view="open"] #shop-page-status[data-state="ready"] { display:none; }
+body[data-shop-view="open"] .shop-page-links { display:none; }
+body[data-shop-view="open"] #shop-page-status[data-state="failed"] ~ .shop-page-links { display:block; padding:12px; }
+
+/* Both destinations use one card action layout, independent of runtime button rules. */
+.candidate-actions { display:grid; gap:10px; margin-top:16px; }
+#agent-app .candidate-actions > button { display:flex; align-items:center; justify-content:center; width:100%; min-height:44px; margin:0; padding:10px 14px; border:1px solid var(--accent); border-radius:8px; font:600 14px/1.5 var(--ns-font); cursor:pointer; }
+#agent-app .candidate-actions > .candidate-chat { background:#fff; color:var(--accent); }
+#agent-app .candidate-actions > .candidate-chat:hover { background:#eef4ef; }
+#agent-app .candidate-actions > .candidate-button,
+#agent-app .candidate-actions > .candidate-chat:only-child { background:var(--accent); color:#fff; }
+#agent-app .candidate-actions > .candidate-button:hover,
+#agent-app .candidate-actions > .candidate-chat:only-child:hover { background:#194637; }

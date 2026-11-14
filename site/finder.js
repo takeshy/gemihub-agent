@@ -158,15 +158,18 @@ export class FinderPage {
    * The shop's page as this site frames it: with the current conditions in the fragment when they
    * are complete, and the plain page otherwise. The same allowlist as a move to the shop's site.
    */
-  framedShopUrl(shopId) {
+  framedShopUrl(shopId, target = "reserve", courseId) {
     const shop = this.shops.find(item => item.id === shopId);
+    const page = new URL(shop.pageUrl);
+    if (target === "shop") page.pathname = page.pathname.replace(/\/reserve$/, "/") || "/";
     const validation = validateConditions(this.conditions, this.now());
-    if (!validation.ok) return { url: shop.pageUrl, conditions: null };
+    if (!validation.ok) return { url: page.href, conditions: null };
     const c = validation.conditions;
-    const url = new URL(shop.pageUrl);
+    const url = new URL(page.href);
     const hash = new URLSearchParams({ aw: "v1", date: c.date, time: c.time, people: String(c.partySize), course: c.course });
     if (c.budgetPerPerson !== undefined) hash.set("budget", String(c.budgetPerPerson));
     if (c.avoid.length) hash.set("avoid", c.avoid.join(","));
+    if (target === "reserve" && courseId && this.checkOpenShop({ shopId, courseId, expectedVersion: this.version }).ok) hash.set("course_id", courseId);
     url.hash = hash.toString();
     const { note: _note, ...shared } = c;
     return { url: url.href, conditions: clone(shared) };

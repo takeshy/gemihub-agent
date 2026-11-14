@@ -165,3 +165,16 @@ test("shop registry rejects insecure URLs, credentials and tool-name collisions"
     { networkUrl: shops[1].networkUrl }, { id: shops[1].id },
   ]) assert.throws(() => validateShops({ ...config, shops: [{ ...config.shops[0], ...changes }, ...config.shops.slice(1)] }));
 });
+
+test("shop and reservation visits use different pages and only verified course IDs", () => {
+  const page = new FinderPage(shops, { now });
+  page.setConditions(valid());
+  page.showCandidates({ expectedVersion: page.version, candidates: [candidate()] });
+  const home = new URL(page.framedShopUrl("akari", "shop").url);
+  const reserve = new URL(page.framedShopUrl("akari", "reserve", "winter").url);
+  assert.equal(home.pathname, "/s/akari/");
+  assert.equal(reserve.pathname, "/s/akari/reserve");
+  assert.equal(new URLSearchParams(reserve.hash.slice(1)).get("course_id"), "winter");
+  assert.equal(new URLSearchParams(new URL(page.framedShopUrl("akari", "reserve", "guessed").url).hash.slice(1)).has("course_id"), false);
+  assert.equal(new URLSearchParams(home.hash.slice(1)).has("note"), false);
+});

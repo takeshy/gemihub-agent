@@ -10,7 +10,7 @@ export function registerActions(actions) {
     inputSchema: { type: "object", additionalProperties: false, properties, required }, execute });
   register("get_finder_state", "日本時間の今日と曜日、予約条件・比較結果・version、ジャンル/場所、確認中の範囲inquiryBatch、画面内に開いている店openShopを読む。nullの希望は未指定。候補14店以下なら希望の追加質問は不要。", "read", {}, [], () => ({ ...App.page.getState(), searchPreferences: App.inquiries?.preferences || { cuisine: null, area: null }, inquiryBatch: App.inquiries?.batchState() || null, openShop: App.shopFrame?.shop ? { id: App.shopFrame.shop.id, name: App.shopFrame.shop.name } : null }));
   register("open_shop", "利用者が選んだ1店のページを、この画面内に開く。有効な検索条件（日時・人数・コース要否・予算・食材）はお店のページへ渡す。相談と予約は利用者がお店のページで行う。予約はしない。", "write",
-    { shopId }, ["shopId"], args => App.shopFrame?.open(args.shopId) || { ok: false, reason: "準備ができていません。" });
+    { shopId, target: { type: "string", enum: ["shop", "reserve"], description: "shop=お店のページ、reserve=予約ページ。利用者が予約を希望した場合はreserve。" } }, ["shopId"], args => App.shopFrame?.open(args.shopId, { target: args.target || "shop" }) || { ok: false, reason: "準備ができていません。" });
   register("list_registered_shops", "登録店のid・店名・エリア・料理・pageUrl・networkUrl・networkToolを読む。空席や価格は含まない。", "read",
     { area: string("任意の場所。新宿、東京、横浜など。空文字は指定なし。", 80), cuisine: string("任意のジャンル。中華、イタリアン、和食など。空文字は指定なし。", 80) }, [], args => App.page.listShops(args));
   register("confirm_shop_inquiries", "日時人数がそろったら使う。候補15店以上のときだけ未指定のジャンル・場所を聞く。全候補数と今回確認する最大4店を表示する。approved:trueのshopsだけ確認し、続きは利用者の次の発話後にnextOffsetで進む。", "write", {

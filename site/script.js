@@ -59,6 +59,8 @@ export class App {
       }
     }
     if (!state.candidates.length) return;
+    // The runtime appends its final answer before returning the input bar to idle.
+    if (document.querySelector(".ns-inputbar")?.dataset.turnActive === "true") return;
     if (!current) {
       current = node("div", undefined, "ns-msg bot finder-results");
       current.dataset.version = String(state.version);
@@ -87,33 +89,30 @@ export class App {
         card.append(details);
         if (candidate.avoidResult) card.append(node("p", `食材の確認：${candidate.avoidResult}`, "allergen-note"));
       }
-      const chat = node("button", "店舗を開く", "candidate-chat");
+      const chat = node("button", "お店を開く", "candidate-chat");
       chat.type = "button";
       chat.addEventListener("click", () => {
-        const result = App.shopFrame?.open(shop.id);
+        const result = App.shopFrame?.open(shop.id, { target: "shop" });
         if (!result) status.textContent = "AIの準備ができてから、もう一度お試しください。";
         else if (!result.ok) status.textContent = result.reason;
       });
-      card.append(chat);
-      const button = node("button", "条件を持ってお店のサイトへ移動", "candidate-button");
+      const actions = node("div", undefined, "candidate-actions");
+      actions.append(chat);
+      card.append(actions);
+      if (!state.valid) { list.append(card); continue; }
+      const button = node("button", "予約ページへ", "candidate-button");
       button.type = "button";
-      button.addEventListener("click", async () => {
-        button.disabled = true;
-        try {
-          const args = { shopId: shop.id, expectedVersion: state.version,
-            ...(candidate.status === "available" && state.conditions.course !== "none" && candidate.courseId ? { courseId: candidate.courseId } : {}) };
-          const { AssistantMount } = await import("./site.js");
-          const allowed = await AssistantMount.review([{ action: "open_shop_page", origin: location.origin, effect: "irreversible", arguments: args }]);
-          if (allowed) {
-            const receipt = App.page.openShopPage(args);
-            if (!receipt.ok) status.textContent = receipt.reason;
-          }
-        } catch (error) { status.textContent = error.message; }
-        finally { button.disabled = state.version !== App.page.version || !App.page.candidates.length; }
+      button.addEventListener("click", () => {
+        const result = App.shopFrame?.open(shop.id, {
+          target: "reserve",
+          ...(state.conditions.course !== "none" && candidate.courseId ? { courseId: candidate.courseId } : {}),
+        });
+        if (!result?.ok) status.textContent = result?.reason || "準備ができていません。";
       });
-      card.append(button);
+      actions.append(button);
       list.append(card);
     }
+    if (messages.lastElementChild !== current) messages.append(current);
     messages.scrollTop = messages.scrollHeight;
   }
 
@@ -122,6 +121,12 @@ export class App {
       App.page.clearCandidates();
       App.inquiries?.reset();
     });
+    const bar = document.querySelector(".ns-inputbar");
+    if (bar && typeof MutationObserver !== "undefined") {
+      new MutationObserver(() => {
+        if (bar.dataset.turnActive === "false") App.renderCandidates(App.page.getState());
+      }).observe(bar, { attributes: true, attributeFilter: ["data-turn-active"] });
+    }
     App.render("init");
   }
 
@@ -132,17 +137,13 @@ export class App {
     for (const shop of shops) {
       const card = node("article", undefined, "shop-card");
       card.append(node("span", `${shop.area} / ${shop.cuisine}`, "eyebrow"), node("h3", shop.name));
-      const chat = node("button", "店舗を開く", "candidate-chat");
+      const chat = node("button", "お店を開く", "candidate-chat");
       chat.type = "button";
       chat.addEventListener("click", () => {
         if (!App.shopFrame) return;
-        App.shopFrame.open(shop.id);
-        document.getElementById("assistant").scrollIntoView();
+        App.shopFrame.open(shop.id, { target: "shop" });
       });
       card.append(chat);
-      const link = node("a", "お店のページを見る ↗");
-      link.href = shop.pageUrl; link.rel = "noreferrer";
-      card.append(link);
       const details = node("details"); details.append(node("summary", "公開URLを確認"));
       for (const [label, url] of [["予約ページ", shop.pageUrl], ["ネットワーク", shop.networkUrl]]) {
         const a = node("a", `${label}：${url}`); a.href = url; a.rel = "noreferrer"; details.append(a);

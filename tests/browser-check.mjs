@@ -217,27 +217,39 @@ try {
     ] }, null, []);
     if (receipt.status !== "succeeded" || !receipt.result.ok) throw new Error("Comparison tool did not succeed");
   });
+  const checkCardActions = async () => {
+    const geometry = await page.locator('.finder-results[data-current="true"] .candidate-actions').evaluateAll(groups => groups.map(group => {
+      const buttons = [...group.querySelectorAll("button")];
+      return buttons.map(button => {
+        const rect = button.getBoundingClientRect();
+        return { width:rect.width, height:rect.height, top:rect.top, bottom:rect.bottom, radius:getComputedStyle(button).borderRadius };
+      });
+    }));
+    assert.ok(geometry.length);
+    for (const pair of geometry) {
+      assert.equal(pair.length, 2);
+      assert.ok(Math.abs(pair[0].width - pair[1].width) < 1, "card actions have equal widths");
+      assert.ok(Math.abs(pair[0].height - pair[1].height) < 1, "card actions have equal heights");
+      assert.equal(pair[0].radius, pair[1].radius);
+      assert.ok(pair[1].top - pair[0].bottom >= 9, "a visible gap separates the two actions");
+    }
+  };
   const currentResults = page.locator('#ns-msgs .finder-results[data-current="true"]');
   assert.equal(await currentResults.locator(".candidate-card").count(), 3);
+  await checkCardActions();
   assert.match(await currentResults.innerText(), /予約不可/);
   assert.doesNotMatch(await currentResults.innerText(), /問い合わせを拒否|確認見送り/);
   assert.equal(await page.locator(".candidate-card").count(), 3);
   assert.equal(await currentResults.locator("h3").first().textContent(), "炉端 灯");
   await currentResults.locator(".candidate-button").first().click();
-  await page.locator("dialog.assistant-review").waitFor();
-  assert.match(await page.locator("dialog.assistant-review").textContent(), /名前や連絡先は渡しません/);
-  assert.doesNotMatch(await page.locator("dialog.assistant-review").textContent(), /このメモは移動先へ渡さない/);
-  await page.getByRole("button", { name: "このページに戻る", exact: true }).click();
+  await page.frameLocator("#shop-page-frame").locator("title").waitFor({ state: "attached" });
+  assert.equal(await page.locator("#shop-close").isVisible(), true);
   assert.equal(new URL(page.url()).origin, base);
-  await currentResults.locator(".candidate-button").first().click();
-  await page.locator("dialog.assistant-review[open]").waitFor();
-  // A background condition change while review is open invalidates the proposal.
+  assert.match(await page.locator("#shop-page-frame").getAttribute("src"), /\/reserve#aw=v1/);
+  await page.locator("#shop-close").click();
   await page.evaluate(() => { const { App } = window.finderTest; App.page.setConditions({ ...App.page.conditions, partySize: 2 }); });
-  await page.getByRole("button", { name: "条件を引き継いで移動", exact: true }).click();
-  await page.waitForFunction(() => document.querySelector(".finder-results-status").textContent.includes("条件が変わりました"));
   assert.equal(await currentResults.count(), 0);
   assert.equal(await page.locator(".candidate-button:enabled").count(), 0);
-  assert.equal(new URL(page.url()).origin, base);
   await page.evaluate(() => {
     const { App } = window.finderTest;
     App.page.setConditions({ ...App.page.conditions, course: "none" });
@@ -259,6 +271,7 @@ try {
   await page.screenshot({ path: "test-results/finder-desktop.png", fullPage: true });
   await page.setViewportSize({ width: 390, height: 844 });
   assert.equal(await page.evaluate(() => document.documentElement.scrollWidth > innerWidth), false, "mobile horizontal overflow");
+  await checkCardActions();
   await page.screenshot({ path: "test-results/finder-mobile.png", fullPage: true });
   // A larger registry still shows the total and approves only the current four.
   const requestsBeforeBatches = shopRequests.length;
@@ -285,9 +298,7 @@ try {
   assert.deepEqual(nextBatch.shops.map(shop => shop.id), ["batch-4", "batch-5", "batch-6", "batch-7"]);
   assert.equal(shopRequests.length, requestsBeforeBatches);
   await currentResults.locator(".candidate-button").first().click();
-  await page.getByRole("button", { name: "条件を引き継いで移動", exact: true }).click();
-  await page.waitForURL("http://127.0.0.1:3000/s/akari/reserve#**");
-  const hash = new URLSearchParams(new URL(page.url()).hash.slice(1));
+  const hash = new URLSearchParams(new URL(await page.locator("#shop-page-frame").getAttribute("src")).hash.slice(1));
   assert.equal(hash.get("course"), "none");
   assert.equal(hash.get("people"), "2");
   assert.equal(hash.has("note"), false);

@@ -18,11 +18,12 @@
     <a class="brand" href="./"><span class="brand-mark" aria-hidden="true">灯</span><span>お店さがし<span class="brand-sub">予約エージェント</span></span></a>
     <nav aria-label="ページ内"><a href="#registered-shops">登録店 <span id="shop-count">—</span></a><a href="#assistant">AIに相談</a></nav>
   </header>
+  <header id="shop-view-header" class="shop-view-header" hidden><button id="shop-close" type="button">← お店探しに戻る</button><span id="shop-name"></span></header>
   <main id="main">
     <section class="hero" aria-labelledby="hero-title">
       <p class="eyebrow">いつもの食事も、みんなの集まりも。</p>
       <h1 id="hero-title">ぴったりのお店を、<br>話しながら見つけよう。</h1>
-      <p class="hero-description">日時と人数、あとは少しのこだわり。<br>あなたのAIがお店に空席とメニューを空席・メニューを確認します。</p>
+      <p class="hero-description">日時と人数、あとは少しのこだわり。<br>お店のAIで空席やメニューを確認します。</p>
       <ol class="steps"><li><span>01</span> 条件を伝える</li><li><span>02</span> お店の回答を比べる</li><li><span>03</span> お店を開いて相談</li><li><span>04</span> お店のページで予約</li></ol>
     </section>
     <section id="assistant" class="assistant panel" aria-labelledby="assistant-heading">
@@ -33,25 +34,6 @@
       <div id="shop-error" class="shop-error" role="alert" hidden>
         <p id="shop-error-text"></p>
         <a href="#registered-shops">登録店の一覧を見る</a>
-      </div>
-      <div id="shop-bar" class="shop-bar" hidden>
-        <div class="shop-title"><span class="eyebrow">SHOP</span><strong id="shop-name"></strong><small id="shop-host"></small></div>
-        <p id="shop-conditions"></p>
-        <p id="shop-relay-status" role="status"></p>
-        <div id="shop-relay-consent" class="shop-relay-consent" role="group" aria-labelledby="shop-relay-question" hidden>
-          <p id="shop-relay-question" class="shop-relay-question"></p>
-          <p id="shop-relay-detail"></p>
-          <div class="shop-actions"><button id="shop-relay-allow" type="button">AIの利用を許可する</button><button id="shop-relay-deny" class="text-button" type="button">許可しない</button></div>
-        </div>
-        <div class="shop-actions">
-          <button id="shop-close" class="text-button" type="button">← お店を閉じて比較に戻る</button>
-          <button id="shop-relay-stop" type="button" hidden>AIの中継を止める</button>
-          <button id="shop-reopen" type="button" hidden>開き直す</button>
-        </div>
-        <div id="shop-view-tabs" class="shop-view-tabs" role="group" aria-label="表示の切り替え" hidden>
-          <button id="shop-view-chat" type="button" aria-pressed="true">お店さがしのチャット</button>
-          <button id="shop-view-page" type="button" aria-pressed="false">店舗ページ</button>
-        </div>
       </div>
       <div id="assistant-layout" class="assistant-layout" data-page="closed" data-view="chat">
       <div id="agent-app">

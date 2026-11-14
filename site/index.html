@@ -1,0 +1,55 @@
+<!doctype html>
+<html lang="ja">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <meta name="referrer" content="no-referrer">
+  <meta name="color-scheme" content="light">
+  <meta name="description" content="席だけの予約から宴会まで。あなたのAIでお店に問い合わせ、条件を比べて予約ページへ。">
+  <title>お店さがし予約エージェント</title>
+  <link rel="stylesheet" href="./assistant.css">
+  <link rel="stylesheet" href="./style.css">
+  <script type="module" src="./script.js"></script>
+  <script type="module" src="./site.js"></script>
+</head>
+<body>
+  <a class="skip-link" href="#main">本文へ</a>
+  <header class="site-header">
+    <a class="brand" href="./"><span class="brand-mark" aria-hidden="true">灯</span><span>お店さがし<span class="brand-sub">予約エージェント</span></span></a>
+    <nav aria-label="ページ内"><a href="#registered-shops">登録店 <span id="shop-count">—</span></a><a href="#assistant">AIに相談</a></nav>
+  </header>
+  <main id="main">
+    <section class="hero" aria-labelledby="hero-title">
+      <p class="eyebrow">いつもの食事も、みんなの集まりも。</p>
+      <h1 id="hero-title">ぴったりのお店を、<br>話しながら見つけよう。</h1>
+      <p class="hero-description">日時と人数、あとは少しのこだわり。<br>あなたのAIがお店に空席とメニューを問い合わせます。</p>
+      <ol class="steps"><li><span>01</span> 条件を伝える</li><li><span>02</span> お店の回答を比べる</li><li><span>03</span> お店のページで予約</li></ol>
+    </section>
+    <section id="assistant" class="assistant panel" aria-labelledby="assistant-heading">
+      <div class="section-heading"><span class="eyebrow">YOUR ASSISTANT</span><h2 id="assistant-heading">お店さがしを相談する</h2></div>
+      <p>行きたい料理のジャンルや場所、日時と人数をチャットで伝えてください。問い合わせ先の件数を確認してから、お店を調べます。</p>
+      <p class="assistant-note">ご自身のAIを使って相談します。<button id="ai-settings-open" class="text-button" type="button" disabled>AIの設定</button></p>
+      <p id="assistant-status" role="status">AIを準備しています。読み込めない場合も、登録店のリンクは使えます。</p>
+      <div id="agent-app">
+        <div data-ns-slot="header"></div>
+        <div class="assistant-panels"><div data-ns-slot="chat"></div><div data-ns-slot="agents"></div></div>
+        <dialog id="ai-setup-dialog" class="ai-setup" aria-labelledby="ai-setup-heading" aria-describedby="ai-setup-description">
+          <h2 id="ai-setup-heading">AIを設定して始める</h2>
+          <p id="ai-setup-description">お店さがしにはAIの設定が必要です。プロバイダーを選び、ご自身のAPIキーを入力してください。</p>
+          <label for="ai-provider">プロバイダー<select id="ai-provider"></select></label>
+          <p class="ai-key-link"><a id="ai-key-link" target="_blank" rel="noopener noreferrer"></a></p>
+          <div data-ns-slot="settings"></div>
+          <button id="ai-setup-close" class="text-button" type="button">閉じる</button>
+        </dialog>
+      </div>
+    </section>
+    <section id="registered-shops" aria-labelledby="shops-heading">
+      <div class="section-heading"><span class="eyebrow">OUR NEIGHBOURS</span><h2 id="shops-heading">登録されているお店</h2></div>
+      <p class="muted">公開ネットワークを、あなたのブラウザで実行します。空席・価格は問い合わせ時に確認します。</p>
+      <div id="shop-list" class="card-grid"></div>
+    </section>
+  </main>
+  <footer><p>メッセージと条件は、あなたが選んだLLMと、許可したお店のエージェント（あなたのブラウザ内で実行）に送られます。</p><p>お店のエージェントは、問い合わせを自店の読み取り専用MCPへ送る場合があります。空席は予約の確保を意味しません。</p></footer>
+  <noscript>このサイトのAIにはJavaScriptが必要です。</noscript>
+</body>
+</html>

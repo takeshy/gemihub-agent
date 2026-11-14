@@ -1,0 +1,85 @@
+{
+  "brand": "お店さがし予約エージェント",
+  "networks": [
+    {
+      "name": "reservation_finder",
+      "front_man": "finder_front",
+      "hocon": "./reservation_finder.network.json",
+      "description": "日時・人数などを聞き、登録店のエージェントに空席とメニューを問い合わせて比べます。席だけの予約から宴会まで。予約はお店のページで。",
+      "tags": [
+        "agentified-website",
+        "restaurant-reservation",
+        "multi-site"
+      ],
+      "sample_queries": [
+        "今夜19時に2人、席だけ空いている店は？",
+        "12月18日19時から12人、1人5000円以内のコースで探して",
+        "えびが食べられない人がいる。対応できる店は？",
+        "3店の空席を比べて",
+        "このまま予約まで済ませて"
+      ]
+    }
+  ],
+  "llm_router": {
+    "base_url": "https://openrouter.ai/api/v1",
+    "mock": false,
+    "byok_router": "https://openrouter.ai/api/v1"
+  },
+  "allowed_peers": [
+    "http://127.0.0.1:3000"
+  ],
+  "peer_policy": {
+    "mode": "closed",
+    "deny_origins": [],
+    "note": "Calls only registered shop networks after visitor consent. No cross-site reservation actions."
+  },
+  "agent_mcp": {
+    "protocol": "nsdeploy-agent-mcp/v1",
+    "network": "reservation_finder",
+    "front_man": "finder_front",
+    "available": false,
+    "reason": "This is a static bundle; a public MCP facade requires an application host."
+  },
+  "theme": {
+    "primary": "#28594b"
+  },
+  "linking": {
+    "protocol": "nsdeploy-link/v1",
+    "exports": [
+      {
+        "network": "reservation_finder",
+        "front_man": "finder_front",
+        "aliases": [
+          "reservation_finder",
+          "finder_front"
+        ],
+        "url": "reservation_finder"
+      }
+    ],
+    "imports": [],
+    "link_updates": {
+      "mode": "browser-local"
+    }
+  },
+  "deployment": {
+    "mode": "static",
+    "self_contained_runtime": true,
+    "browser_mock": false,
+    "direct_byok": true,
+    "direct_mcp_requires_cors": true,
+    "public_mcp_facade": false
+  },
+  "actions": {
+    "version": 1,
+    "module": "./site-actions.js",
+    "bridge": "./bridge/action-bridge.html",
+    "agentTools": [
+      "get_finder_state",
+      "list_registered_shops",
+      "set_reservation_conditions",
+      "confirm_shop_inquiries",
+      "show_candidates",
+      "open_shop_page"
+    ]
+  }
+}

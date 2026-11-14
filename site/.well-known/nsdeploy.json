@@ -1,0 +1,18 @@
+{
+  "protocol": "nsdeploy-link/v1",
+  "exports": [
+    {
+      "network": "reservation_finder",
+      "front_man": "finder_front",
+      "aliases": [
+        "reservation_finder",
+        "finder_front"
+      ],
+      "url": "reservation_finder"
+    }
+  ],
+  "imports": [],
+  "link_updates": {
+    "mode": "browser-local"
+  }
+}

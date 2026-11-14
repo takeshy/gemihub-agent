@@ -1,0 +1,158 @@
+// Page-owned business rules. Shared by manual controls and website_* actions.
+export const COURSE_LABELS = { none: "席のみ", wanted: "コース希望", any: "どちらでも" };
+export const ALLERGENS = {
+  shrimp: "えび", crab: "かに", walnut: "くるみ", wheat: "小麦",
+  buckwheat: "そば", egg: "卵", milk: "乳", peanut: "落花生",
+};
+export const allergenLabel = word => Object.hasOwn(ALLERGENS, word) ? ALLERGENS[word] : word;
+const aliases = { えび: "shrimp", エビ: "shrimp", 海老: "shrimp", かに: "crab", カニ: "crab", くるみ: "walnut", 小麦: "wheat", そば: "buckwheat", 卵: "egg", 乳: "milk", 牛乳: "milk", 落花生: "peanut", ピーナッツ: "peanut" };
+const clone = value => structuredClone(value);
+const refuse = (reason, field) => ({ ok: false, reason, ...(field ? { field } : {}) });
+const object = value => value && typeof value === "object" && !Array.isArray(value);
+const text = (value, max) => typeof value === "string" && value.length <= max;
+const identifier = value => text(value, 80) && /^[a-zA-Z0-9][a-zA-Z0-9_-]*$/.test(value);
+
+export function japanNow(now = new Date()) {
+  const parts = Object.fromEntries(new Intl.DateTimeFormat("en-CA", {
+    timeZone: "Asia/Tokyo", year: "numeric", month: "2-digit", day: "2-digit",
+    hour: "2-digit", minute: "2-digit", hourCycle: "h23",
+  }).formatToParts(now).map(p => [p.type, p.value]));
+  return {
+    today: `${parts.year}-${parts.month}-${parts.day}`,
+    todayLabel: new Intl.DateTimeFormat("ja-JP", { timeZone: "Asia/Tokyo", dateStyle: "full" }).format(now),
+    currentTime: `${parts.hour}:${parts.minute}`, timeZone: "Asia/Tokyo",
+  };
+}
+
+export function validateConditions(input, now = new Date()) {
+  if (!object(input)) return refuse("予約条件を入力してください。");
+  const allowed = ["date", "time", "partySize", "course", "budgetPerPerson", "avoid", "note"];
+  if (Object.keys(input).some(key => !allowed.includes(key))) return refuse("扱えない条件が含まれています。");
+  const { date, time, partySize, course = "any", budgetPerPerson, avoid = [], note = "" } = input;
+  if (!text(date, 10) || !/^\d{4}-\d{2}-\d{2}$/.test(date)) return refuse("日付を入力してください。", "date");
+  const parsed = new Date(`${date}T00:00:00+09:00`);
+  if (!Number.isFinite(parsed.getTime()) || japanNow(parsed).today !== date) return refuse("実在する日付を入力してください。", "date");
+  if (!text(time, 5) || !/^([01]\d|2[0-3]):[0-5]\d$/.test(time)) return refuse("開始時刻を HH:MM 形式で入力してください。", "time");
+  if (new Date(`${date}T${time}:00+09:00`) <= now) return refuse("これからの日時を指定してください（日本時間）。", "date");
+  if (!Number.isInteger(partySize) || partySize < 1 || partySize > 200) return refuse("人数は1〜200名で入力してください。", "partySize");
+  if (!Object.hasOwn(COURSE_LABELS, course)) return refuse("コースの要否を選んでください。", "course");
+  if (budgetPerPerson !== undefined && (!Number.isInteger(budgetPerPerson) || budgetPerPerson < 1 || budgetPerPerson > 1000000)) return refuse("予算は1人あたり1〜1,000,000円で入力してください。", "budgetPerPerson");
+  if (!Array.isArray(avoid) || avoid.length > 13) return refuse("避けたい食材は8品目と自由入力5個までです。", "avoid");
+  const normalized = [];
+  let freeCount = 0;
+  for (const item of avoid) {
+    if (!text(item, 20) || !item.trim() || /[\d@:/?#&=\n\r]|sk-|otk_|Bearer/i.test(item)) return refuse("食材は各20文字までで入力してください。連絡先やキーは入力しないでください。", "avoid");
+    const word = item.trim();
+    const value = Object.hasOwn(aliases, word) ? aliases[word] : word;
+    if (normalized.includes(value)) continue;
+    if (!Object.hasOwn(ALLERGENS, value)) freeCount += 1;
+    if (freeCount > 5) return refuse("自由入力の食材は5個までです。", "avoid");
+    normalized.push(value);
+  }
+  if (!text(note, 500)) return refuse("メモは500文字までです。", "note");
+  return { ok: true, conditions: { date, time, partySize, course, ...(budgetPerPerson === undefined ? {} : { budgetPerPerson }), avoid: normalized, note } };
+}
+
+export class FinderPage {
+  constructor(shops, { now = () => new Date(), navigate = url => globalThis.location.assign(url), onChange = () => {} } = {}) {
+    this.shops = clone(shops);
+    this.now = now;
+    this.navigate = navigate;
+    this.onChange = onChange;
+    this.conditions = { date: "", time: "", partySize: 2, course: "any", avoid: [], note: "" };
+    this.version = 0;
+    this.candidates = [];
+  }
+
+  getState() {
+    const validation = validateConditions(this.conditions, this.now());
+    return clone({ ...japanNow(this.now()), conditions: this.conditions, version: this.version,
+      valid: validation.ok, ...(validation.ok ? {} : { reason: validation.reason }), candidates: this.candidates });
+  }
+
+  listShops({ area = "", cuisine = "" } = {}) {
+    const normalize = value => value.normalize("NFKC").toLowerCase().replace(/\s/g, "");
+    const place = normalize(area);
+    const genre = normalize(cuisine).replace(/料理$/, "");
+    return clone(this.shops.filter(shop => (!place || normalize(shop.area).includes(place))
+      && (!genre || normalize(shop.cuisine).includes(genre))));
+  }
+
+  setConditions(input) {
+    const result = validateConditions(input, this.now());
+    if (!result.ok) return result;
+    this.conditions = result.conditions;
+    this.version += 1;
+    this.candidates = [];
+    this.onChange("conditions");
+    return { ok: true, ...this.getState() };
+  }
+
+  // Manual edits invalidate results immediately, including an incomplete draft.
+  editConditions(draft) {
+    this.conditions = clone(draft);
+    this.version += 1;
+    this.candidates = [];
+    this.onChange("draft");
+    return this.getState();
+  }
+
+  showCandidates({ candidates, expectedVersion } = {}) {
+    if (!Number.isInteger(expectedVersion) || expectedVersion !== this.version) return refuse("条件が変わりました。最新の条件で問い合わせ直してください。");
+    if (!validateConditions(this.conditions, this.now()).ok) return refuse("先に日時と人数を入力してください。");
+    if (!Array.isArray(candidates) || candidates.length > this.shops.length) return refuse("比較する店を確認してください。");
+    const ids = new Set();
+    const allowed = ["shopId", "status", "remaining", "durationMinutes", "seatOnly", "courseId", "courseName", "priceText", "avoidResult", "summary"];
+    for (const candidate of candidates) {
+      if (!object(candidate) || Object.keys(candidate).some(key => !allowed.includes(key))) return refuse("比較結果の形式が正しくありません。");
+      if (!this.shops.some(shop => shop.id === candidate.shopId) || ids.has(candidate.shopId)) return refuse("登録店のIDを重複なく指定してください。");
+      ids.add(candidate.shopId);
+      if (!["available", "full", "unknown", "declined"].includes(candidate.status)) return refuse("確認結果の状態が正しくありません。");
+      if (!text(candidate.summary, 1000) || !candidate.summary.trim()) return refuse("根拠となる店の回答を要約してください。");
+      for (const key of ["remaining", "durationMinutes"]) {
+        if (candidate[key] !== undefined && (!Number.isInteger(candidate[key]) || candidate[key] < 0 || candidate[key] > 10000)) return refuse("席数と利用時間は0以上の整数で指定してください。");
+      }
+      if (candidate.seatOnly !== undefined && typeof candidate.seatOnly !== "boolean") return refuse("席のみ可否の形式が正しくありません。");
+      if (candidate.courseId !== undefined && !identifier(candidate.courseId)) return refuse("コースIDの形式が正しくありません。");
+      for (const key of ["courseName", "priceText", "avoidResult"]) {
+        if (candidate[key] !== undefined && !text(candidate[key], key === "avoidResult" ? 1000 : 200)) return refuse("店の回答が長すぎます。");
+      }
+    }
+    this.candidates = clone(candidates);
+    this.onChange("candidates");
+    return { ok: true, count: candidates.length, version: this.version };
+  }
+
+  clearCandidates() {
+    this.candidates = [];
+    this.onChange("candidates");
+  }
+
+  checkOpenShop({ shopId, courseId, expectedVersion } = {}) {
+    if (!Number.isInteger(expectedVersion) || expectedVersion !== this.version) return refuse("条件が変わりました。最新の条件を確認してから、もう一度選んでください。");
+    const validation = validateConditions(this.conditions, this.now());
+    if (!validation.ok) return validation;
+    const shop = this.shops.find(item => item.id === shopId);
+    if (!shop) return refuse("登録されている店を選んでください。");
+    const candidate = this.candidates.find(item => item.shopId === shopId);
+    if (courseId !== undefined && (!identifier(courseId) || candidate?.courseId !== courseId || candidate.status !== "available")) return refuse("確認できたコースを選んでください。");
+    const c = validation.conditions;
+    if (c.course === "none" && courseId) return refuse("席のみの予約ではコースを指定できません。");
+    const url = new URL(shop.pageUrl);
+    const hash = new URLSearchParams({ aw: "v1", date: c.date, time: c.time, people: String(c.partySize), course: c.course });
+    if (c.budgetPerPerson !== undefined) hash.set("budget", String(c.budgetPerPerson));
+    if (c.avoid.length) hash.set("avoid", c.avoid.join(","));
+    if (courseId) hash.set("course_id", courseId);
+    // An explicit allowlist: never copy note, chat, provider settings or keys.
+    url.hash = hash.toString();
+    return { ok: true, url: url.href, shop: clone(shop), conditions: clone(c) };
+  }
+
+  openShopPage(args) {
+    const check = this.checkOpenShop(args);
+    if (!check.ok) return check;
+    // Return the receipt to the runtime before the scheduled navigation occurs.
+    this.navigate(check.url);
+    return { ok: true, url: check.url };
+  }
+}

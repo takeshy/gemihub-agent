@@ -1,0 +1,10 @@
+{
+  "networks": [
+    {
+      "name": "reservation_finder"
+    }
+  ],
+  "actions": {
+    "version": 1
+  }
+}

@@ -13,10 +13,10 @@ export function registerActions(actions) {
     { shopId }, ["shopId"], args => App.shopFrame?.open(args.shopId) || { ok: false, reason: "準備ができていません。" });
   register("list_registered_shops", "登録店のid・店名・エリア・料理・pageUrl・networkUrl・networkToolを読む。空席や価格は含まない。", "read",
     { area: string("任意の場所。新宿、東京、横浜など。空文字は指定なし。", 80), cuisine: string("任意のジャンル。中華、イタリアン、和食など。空文字は指定なし。", 80) }, [], args => App.page.listShops(args));
-  register("confirm_shop_inquiries", "ジャンル・場所と日時人数がそろったら使う。親の情報で絞った問い合わせ先の件数をチャットに示し、一度だけ問い合わせるか聞く。approved:trueの店だけ問い合わせる。", "write", {
+  register("confirm_shop_inquiries", "ジャンル・場所と日時人数がそろったら使う。親の情報で絞った確認先の件数をチャットに示し、一度だけ空席・メニューを確認するか聞く。approved:trueの店だけ空席・メニューを確認する。", "write", {
     cuisine: string("利用者に確認した希望ジャンル。明示的に指定なし・おまかせなら空文字。", 80),
     area: string("利用者に確認した場所。明示的に指定なし・どこでもなら空文字。", 80), expectedVersion: version,
-  }, ["cuisine", "area", "expectedVersion"], args => App.inquiries?.confirm(args) || { ok: false, reason: "問い合わせの準備ができていません。" });
+  }, ["cuisine", "area", "expectedVersion"], args => App.inquiries?.confirm(args) || { ok: false, reason: "空席・メニューの確認の準備ができていません。" });
   register("set_reservation_conditions", "利用者がチャットで指定した予約条件を保存し、古い比較結果を消す。予約は行わない。更新後の条件とversionを返す。", "write", {
     date: string("日本時間の実在する日付 YYYY-MM-DD。今日の日付はget_finder_stateから読む。", 10),
     time: string("日本時間の開始時刻 HH:MM。", 5), partySize: integer("利用者が指定した人数（1〜200名）。", 200, 1),
@@ -25,11 +25,11 @@ export function registerActions(actions) {
     avoid: { type: "array", maxItems: 13, items: string("避けたい食材名。8品目または自由語5個まで。", 20), description: "利用者が避けたい食材。連絡先やキーを含めない。" },
     note: string("相談用メモ。店への依頼やURLにこの文字列をコピーしない。", 500),
   }, ["date", "time", "partySize"], args => App.page.setConditions(args));
-  register("show_candidates", "店の回答に基づく比較カードと予約へ進むボタンをチャット内に表示する。拒否・失敗・空返答はdeclinedかunknown。推測した空席・価格・食材判定を入れない。", "write", {
+  register("show_candidates", "店の回答に基づく比較カードと予約へ進むボタンをチャット内に表示する。店の回答で予約条件に合わない場合はdeclined、満席はfull、確認の同意なし・失敗・空返答はunknown。推測した空席・価格・食材判定を入れない。", "write", {
     expectedVersion: version,
-    candidates: { type: "array", maxItems: App.page.shops.length, description: "問い合わせた店の回答。", items: {
+    candidates: { type: "array", maxItems: App.page.shops.length, description: "確認した店の回答。", items: {
       type: "object", additionalProperties: false, required: ["shopId", "status", "summary"], properties: {
-        shopId, status: { type: "string", enum: ["available", "full", "unknown", "declined"], description: "店の回答または同意の拒否から決める。" },
+        shopId, status: { type: "string", enum: ["available", "full", "unknown", "declined"], description: "available=空席あり、full=満席、declined=店の回答で条件に合わず予約不可、unknown=未確認・接続失敗・確認の同意なし。" },
         remaining: integer("店が回答した残り席数。", 10000), durationMinutes: integer("店が回答した利用時間（分）。", 10000),
         seatOnly: { type: "boolean", description: "店が席のみ予約を受け付けるか。" },
         courseId: string("店が返したコースID。", 80), courseName: string("店が返したコース名。"),

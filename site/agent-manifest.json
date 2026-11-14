@@ -5,7 +5,7 @@
       "name": "reservation_finder",
       "front_man": "finder_front",
       "hocon": "./reservation_finder.network.json",
-      "description": "日時・人数などを聞き、登録店のエージェントに空席とメニューを問い合わせて比べます。席だけの予約から宴会まで。予約はお店のページで。",
+      "description": "日時・人数などを聞き、各店のAIで空席やメニューを確認して比べます。席だけの予約から宴会まで。予約はお店のページで。",
       "tags": [
         "agentified-website",
         "restaurant-reservation",

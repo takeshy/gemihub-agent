@@ -54,7 +54,7 @@ export class App {
         current = message;
       } else {
         message.dataset.current = "false";
-        message.querySelector(".finder-results-status").textContent = "条件が変わりました。最新の条件で問い合わせてください。";
+        message.querySelector(".finder-results-status").textContent = "条件が変わりました。最新の条件で確認してください。";
         for (const button of message.querySelectorAll("button")) button.disabled = true;
       }
     }
@@ -72,7 +72,7 @@ export class App {
     const status = node("p", "", "finder-results-status");
     status.setAttribute("role", "status");
     current.replaceChildren(heading, list, status);
-    const labels = { available: "空きあり", full: "満席", unknown: "確認できず", declined: "問い合わせを拒否" };
+    const labels = { available: "空きあり", full: "満席", unknown: "確認できず", declined: "予約不可" };
     for (const candidate of state.candidates) {
       const shop = shops.find(item => item.id === candidate.shopId);
       const card = node("article", undefined, "candidate-card");

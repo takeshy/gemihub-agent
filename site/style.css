@@ -562,3 +562,11 @@ footer p {
   #shop-page-frame { min-height:80vh; }
 }
 .shop-error[hidden], .shop-bar[hidden], .shop-page-panel[hidden], .shop-view-tabs[hidden], .shop-relay-consent[hidden], .shop-actions button[hidden] { display:none; }
+
+.finder-chat-toolbar { display: flex; justify-content: flex-end; padding: 4px 8px; flex: none; }
+.assistant-chat-menu { position: relative; flex: none; }
+.assistant-chat-menu > summary { display: grid; place-items: center; list-style: none; width: 32px; height: 32px; border-radius: 6px; color: var(--muted); font-size: 24px; cursor: pointer; }
+.assistant-chat-menu > summary::-webkit-details-marker { display: none; }
+.assistant-chat-menu > summary:hover { background: var(--paper); }
+.assistant-chat-menu > summary:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
+.assistant-chat-menu > button { position: absolute; right: 0; top: calc(100% + 6px); z-index: 2; width: max-content; min-width: 160px; padding: 10px 14px; border: 1px solid var(--line); border-radius: 8px; background: #fff; color: var(--ink); box-shadow: 0 4px 16px #0002; text-align: left; font: 14px/1.5 system-ui, sans-serif; cursor: pointer; }

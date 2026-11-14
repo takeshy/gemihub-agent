@@ -56,10 +56,10 @@ try {
   }
   assert.equal(shopRequests.length, 0);
 
-  // From the shop's own site: "Ask the AI" names the shop only.
+  // Direct shop visits do not show a link to the finder.
   const direct = await context.newPage();
   await direct.goto(`${shopOrigin}/s/akari/reserve`);
-  assert.equal(await direct.locator("#reserve-consult a").getAttribute("href"), `${base}/?shop=akari`);
+  assert.equal(await direct.locator("#reserve-consult").count(), 0);
   await direct.close();
 
   // Arriving without an AI setup: the shop opens, its chat does not start, and saving the setup comes back to the same shop.
@@ -91,10 +91,11 @@ try {
   await page.locator("#shop-reopen").click();
   await page.locator("#shop-relay-consent").waitFor();
   await page.locator("#shop-relay-allow").click();
+  if (await frame.locator("#assistant-toggle").getAttribute("aria-expanded") === "false") await frame.locator("#assistant-toggle").click();
   await frame.locator("#ns-input").waitFor();
   assert.match(await frame.locator("#assistant-status").textContent(), /キーはこのお店には渡されていません/);
   assert.equal(await frame.locator(".ns-settings").isVisible(), false, "no key or provider fields in the shop's page");
-  assert.equal(await frame.locator("#reserve-consult").isVisible(), false, "the finder is not opened inside its own frame");
+  assert.equal(await frame.locator("#reserve-consult").count(), 0, "no link back to the finder in the shop page");
   script = [{ tool: "mcp_get_shop_info" }, { content: receipts => `営業時間は ${JSON.parse(JSON.parse(receipts[0].content).text ?? receipts[0].content).hours?.regular ?? receipts[0].content.match(/\d\d:\d\d . \d\d:\d\d/)?.[0]} です。` }];
   let calls = await sendInShop("営業時間は？");
   assert.equal(calls.length, 2);
@@ -165,6 +166,7 @@ try {
   // Switching shops: the first shop's session does not carry over, and the next shop asks again.
   await page.locator("#shop-reopen").click();
   await page.locator("#shop-relay-allow").click();
+  if (await frame.locator("#assistant-toggle").getAttribute("aria-expanded") === "false") await frame.locator("#assistant-toggle").click();
   await frame.locator("#ns-input").waitFor();
   const first = await page.evaluate(async () => (await import("./script.js")).App.shopFrame.relay.session.id);
   await page.locator("#shop-list .shop-card").nth(1).locator(".candidate-chat").click();
@@ -172,6 +174,7 @@ try {
   assert.equal(await page.locator("#shop-name").textContent(), "トラットリア ソーレ");
   assert.equal(await page.evaluate(async () => (await import("./script.js")).App.shopFrame.relay.session), null, "no session until this shop is allowed");
   await page.locator("#shop-relay-allow").click();
+  if (await frame.locator("#assistant-toggle").getAttribute("aria-expanded") === "false") await frame.locator("#assistant-toggle").click();
   await frame.locator("#ns-input").waitFor();
   assert.notEqual(await page.evaluate(async () => (await import("./script.js")).App.shopFrame.relay.session.id), first);
   script = [{ content: "ソーレです。" }];

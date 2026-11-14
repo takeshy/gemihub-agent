@@ -98,7 +98,7 @@ export class FinderPage {
   }
 
   showCandidates({ candidates, expectedVersion } = {}) {
-    if (!Number.isInteger(expectedVersion) || expectedVersion !== this.version) return refuse("条件が変わりました。最新の条件で問い合わせ直してください。");
+    if (!Number.isInteger(expectedVersion) || expectedVersion !== this.version) return refuse("条件が変わりました。最新の条件で確認し直してください。");
     if (!validateConditions(this.conditions, this.now()).ok) return refuse("先に日時と人数を入力してください。");
     if (!Array.isArray(candidates) || candidates.length > this.shops.length) return refuse("比較する店を確認してください。");
     const ids = new Set();

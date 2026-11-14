@@ -20,7 +20,40 @@ export class AssistantMount {
   /**
    * The first chat message once the visitor has a key: what the assistant can do here.
    */
-  static GREETING = "行きたい料理のジャンルや場所はありますか？中華・イタリアン・和食など。日時と人数も教えてください。おまかせでも大丈夫です。候補を絞り、問い合わせるお店の数を先にお伝えします。";
+  /** Keep the frequent send action beside the input; put reset in a quiet header menu. */
+  static mountChatControls() {
+    const english = document.documentElement.lang === "en";
+    const reset = document.getElementById("ns-newchat");
+    const input = document.getElementById("ns-input");
+    input.placeholder = english ? "Describe the restaurant you want…" : "行きたいお店の希望を相談…";
+    input.setAttribute("aria-label", english ? "Message to the AI" : "AIへのメッセージ");
+    document.getElementById("ns-send").textContent = english ? "Send" : "送信";
+    const menu = document.createElement("details");
+    menu.className = "assistant-chat-menu";
+    const summary = document.createElement("summary");
+    summary.textContent = "⋯";
+    summary.setAttribute("aria-label", english ? "Conversation options" : "会話のメニュー");
+    reset.textContent = english ? "Start a new conversation" : "会話をやり直す";
+    reset.title = english ? "Clear this conversation and start again" : "この会話を消して新しく始めます";
+    reset.removeAttribute("style");
+    menu.append(summary, reset);
+    const toolbar = document.createElement("div");
+    toolbar.className = "finder-chat-toolbar";
+    toolbar.append(menu);
+    document.getElementById("ns-msgs").closest(".ns-chat").prepend(toolbar);
+    reset.addEventListener("click", () => { menu.open = false; input.focus(); });
+    document.addEventListener("click", event => { if (!menu.contains(event.target)) menu.open = false; });
+    menu.addEventListener("keydown", event => {
+      if (event.key === "Escape" && menu.open) {
+        event.preventDefault();
+        event.stopPropagation();
+        menu.open = false;
+        summary.focus();
+      }
+    });
+  }
+
+  static GREETING = "行きたい料理のジャンルや場所はありますか？中華・イタリアン・和食など。日時と人数も教えてください。おまかせでも大丈夫です。候補を絞り、空席・メニューを確認するお店の数を先にお伝えします。";
 
   /**
    * The confirmation dialog's words for each irreversible action. Name each button after
@@ -52,6 +85,7 @@ export class AssistantMount {
         sandboxWorkerUrl: new URL("runtime/sandbox-worker.js", siteBase).href,
       });
       AssistantMount.engine = booted.engine;
+      AssistantMount.mountChatControls();
       AssistantMount.defaultReview = booted.engine.onActionConfirm;
       booted.engine.onActionConfirm = AssistantMount.review;
       App.inquiries = new ShopInquiries(() => App.page, reviewShopInquiries,

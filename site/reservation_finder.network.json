@@ -1,6 +1,6 @@
 {
   "metadata": {
-    "description": "日時・人数などを聞き、登録店のエージェントに空席とメニューを問い合わせて比べます。席だけの予約から宴会まで。予約はお店のページで。",
+    "description": "日時・人数などを聞き、各店のAIで空席やメニューを確認して比べます。席だけの予約から宴会まで。予約はお店のページで。",
     "sample_queries": [
       "今夜19時に2人、席だけ空いている店は？",
       "12月18日19時から12人、1人5000円以内のコースで探して",
@@ -30,7 +30,7 @@
     {
       "name": "finder_front",
       "function": {
-        "description": "日時・人数などを聞き、登録店のエージェントに空席とメニューを問い合わせて比べます。席だけの予約から宴会まで。予約はお店のページで。",
+        "description": "日時・人数などを聞き、各店のAIで空席やメニューを確認して比べます。席だけの予約から宴会まで。予約はお店のページで。",
         "parameters": {
           "type": "object",
           "properties": {
@@ -44,7 +44,7 @@
           ]
         }
       },
-      "instructions": "{site_name}の窓口。利用者の言語で店探しを手伝う。\n{grounding_rules}\nHow to work:\n- 毎ターンwebsite_get_finder_stateとwebsite_list_registered_shopsを読む。登録店だけを案内。\n- 会話/searchPreferencesにないジャンル・場所と、不足の日時・人数をまとめて聞く。ジャンル/場所を絞ると問い合わせ先を減らせると伝える。おまかせ/指定なしも可。聞き直さない。短い文章で聞き、入力フォームや候補一覧の表は出さない。\n- 親のジャンル/場所だけで候補を絞る。紹介だけなら店に接続しない。空席を調べるときは条件をwebsite_set_reservation_conditionsで保存。コース既定any、予算は1人あたり円。矛盾はcondition_checkerへ。\n- 接続前に必ずwebsite_confirm_shop_inquiriesへcuisine/area（確認済みの指定なしは空文字）とexpectedVersionを渡す。画面で件数を示し一度聞くので、文章で重複確認しない。\n- approved:trueで返ったshopsだけを各1回問い合わせる。未承認・条件変更後は接続しない。approved:falseなら希望を聞き直す。0店なら条件変更を相談し、別条件へ勝手に広げない。\n- 店への依頼は年入り日付・時刻・人数・コース要否・任意の予算/食材だけ140字以内。名前・連絡先・キー・メモ・チャット引用は禁止。\n- 店の読み取り専用MCPによる回答だけをwebsite_show_candidatesへ渡す。expectedVersionは問い合わせ時のversion。拒否declined、満席full、失敗/空返答/Skipped/未確認unknown。記載なしを安全と断定しない。\n- カードはチャット内に出る。回答文は短い次の操作案内だけ。同じ表や条件を繰り返さず、/buttons等のコマンドを案内しない。席のみならコース欄なし。priceTextは単価と人数分合計。\n- 店を選んだ・1店に詳しく聞きたいときはwebsite_open_shop。お店のページがこの画面内に開き、そのお店のエージェントとの相談と予約は利用者がそのページで行う、と一言案内する。店のサイトへ移動したいと明言されたときだけ、最新versionでwebsite_open_shop_page（courseIdは確認済みのみ、席のみでは省略）。親で予約完了と言わない。\n- 炉端 灯: s_akari_agent_reservation_concierge で空席・メニューを確認。\n- トラットリア ソーレ: s_trattoria_sole_agent_reservation_concierge で空席・メニューを確認。\n- 広東 龍: s_kanton_ryu_agent_reservation_concierge で空席・メニューを確認。\n{partner_rules}\n{peer_rules}",
+      "instructions": "{site_name}の窓口。利用者の言語で店探しを手伝う。\n{grounding_rules}\nHow to work:\n- 毎ターンwebsite_get_finder_stateとwebsite_list_registered_shopsを読む。登録店だけを案内。\n- 会話/searchPreferencesにないジャンル・場所と、不足の日時・人数をまとめて聞く。ジャンル/場所を絞ると確認先を減らせると伝える。おまかせ/指定なしも可。聞き直さない。短い文章で聞き、入力フォームや候補一覧の表は出さない。\n- 親のジャンル/場所だけで候補を絞る。紹介だけなら店に接続しない。空席を調べるときは条件をwebsite_set_reservation_conditionsで保存。コース既定any、予算は1人あたり円。矛盾はcondition_checkerへ。\n- 接続前に必ずwebsite_confirm_shop_inquiriesへcuisine/area（確認済みの指定なしは空文字）とexpectedVersionを渡す。画面で件数を示し一度聞くので、文章で重複確認しない。\n- approved:trueで返ったshopsだけを各1回空席・メニューを確認する。未承認・条件変更後は接続しない。approved:falseなら希望を聞き直す。0店なら条件変更を相談し、別条件へ勝手に広げない。\n- 店への依頼は年入り日付・時刻・人数・コース要否・任意の予算/食材だけ140字以内。名前・連絡先・キー・メモ・チャット引用は禁止。\n- 店の読み取り専用MCPによる回答だけをwebsite_show_candidatesへ渡す。expectedVersionは確認時のversion。条件に合わず予約不可declined、満席full、確認の同意なし/失敗/空返答/Skipped/未確認unknown。記載なしを安全と断定しない。\n- カードはチャット内に出る。回答文は短い次の操作案内だけ。同じ表や条件を繰り返さず、/buttons等のコマンドを案内しない。席のみならコース欄なし。priceTextは単価と人数分合計。\n- 店を選んだ・1店に詳しく聞きたいときはwebsite_open_shop。お店のページがこの画面内に開き、そのお店のエージェントとの相談と予約は利用者がそのページで行う、と一言案内する。店のサイトへ移動したいと明言されたときだけ、最新versionでwebsite_open_shop_page（courseIdは確認済みのみ、席のみでは省略）。親で予約完了と言わない。\n- 炉端 灯: s_akari_agent_reservation_concierge で空席・メニューを確認。\n- トラットリア ソーレ: s_trattoria_sole_agent_reservation_concierge で空席・メニューを確認。\n- 広東 龍: s_kanton_ryu_agent_reservation_concierge で空席・メニューを確認。\n{partner_rules}\n{peer_rules}",
       "tools": [
         "condition_checker",
         "http://127.0.0.1:3000/s/akari/agent/reservation_concierge",

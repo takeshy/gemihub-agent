@@ -23,7 +23,7 @@ export class ShopInquiries {
   }
 
   async confirm({ cuisine, area, expectedVersion } = {}) {
-    if (this.pending) return { ok: false, reason: "問い合わせ先の確認に回答してください。" };
+    if (this.pending) return { ok: false, reason: "確認先の確認に回答してください。" };
     const page = this.getPage();
     const state = page.getState();
     if (expectedVersion !== state.version || !state.valid) return { ok: false, reason: "最新の日時・人数を確認してください。" };
@@ -44,16 +44,16 @@ export class ShopInquiries {
     page.clearCandidates();
     const shops = page.listShops(this.preferences);
     if (!shops.length) return { ok: false, count: 0, reason: "そのジャンル・場所に合う登録店はありません。希望を変えるか確認してください。" };
-    if (shops.length > 4) return { ok: false, count: shops.length, reason: "一度に問い合わせられるのは4店です。ジャンルや場所で絞ってください。" };
+    if (shops.length > 4) return { ok: false, count: shops.length, reason: "一度に確認できるのは4店です。ジャンルや場所で絞ってください。" };
     const plan = { ...this.preferences, expectedVersion, conditions: state.conditions, shops, count: shops.length };
     const controller = new AbortController();
     this.pending = controller;
     try {
       const accepted = await this.review(plan, controller.signal);
       if (controller.signal.aborted || this.getPage().version !== expectedVersion) {
-        return { ok: false, reason: "条件が変わりました。問い合わせ先を確認し直してください。" };
+        return { ok: false, reason: "条件が変わりました。確認先を確認し直してください。" };
       }
-      if (accepted !== true) return { ok: true, approved: false, count: plan.count, reason: "問い合わせは行っていません。希望を確認してください。" };
+      if (accepted !== true) return { ok: true, approved: false, count: plan.count, reason: "空席・メニューの確認は行っていません。希望を確認してください。" };
       this.approved = plan;
       return { ok: true, approved: true, count: plan.count, shops, version: expectedVersion };
     } finally {
@@ -87,12 +87,12 @@ export function installInquiryPolicy(engine, inquiries) {
   engine.onConsent = info => inquiries.decision(info);
   const resolveRemote = engine.resolveRemote.bind(engine);
   engine.resolveRemote = (url, ...args) => {
-    if (!inquiries.canContactNetwork(url)) throw new Error("先にジャンル・場所と問い合わせ先の件数を確認してください。");
+    if (!inquiries.canContactNetwork(url)) throw new Error("先にジャンル・場所と確認先の件数を確認してください。");
     return resolveRemote(url, ...args);
   };
   const resolveMcp = engine.resolveMcp.bind(engine);
   engine.resolveMcp = (ref, ...args) => {
-    if (!inquiries.canContactMcp(ref)) throw new Error("確認した問い合わせ先に含まれない接続先です。");
+    if (!inquiries.canContactMcp(ref)) throw new Error("確認した確認先に含まれない接続先です。");
     return resolveMcp(ref, ...args);
   };
 }
@@ -103,10 +103,10 @@ export function reviewShopInquiries(plan, signal) {
     const card = document.createElement("div");
     card.className = "ns-msg bot finder-inquiry";
     card.setAttribute("role", "group");
-    card.setAttribute("aria-label", "問い合わせ先の確認");
+    card.setAttribute("aria-label", "確認先の確認");
     const title = document.createElement("p");
     title.className = "finder-inquiry-title";
-    title.textContent = `この条件だと${plan.count}店に問い合わせます。問い合わせますか？`;
+    title.textContent = `${plan.count}店のAIで空席・メニューを確認しますか？`;
     const summary = document.createElement("p");
     const c = plan.conditions;
     summary.textContent = `${plan.cuisine || "ジャンル指定なし"} / ${plan.area || "場所指定なし"} · ${c.date} ${c.time} / ${c.partySize}名 / ${COURSE_LABELS[c.course]}`
@@ -119,14 +119,14 @@ export function reviewShopInquiries(plan, signal) {
     const buttons = document.createElement("div");
     buttons.className = "finder-inquiry-actions";
     const yes = document.createElement("button");
-    yes.type = "button"; yes.textContent = "問い合わせる";
+    yes.type = "button"; yes.textContent = "確認する";
     const no = document.createElement("button");
     no.type = "button"; no.textContent = "条件を変える";
     const finish = accepted => {
       signal.removeEventListener("abort", abort);
       buttons.remove();
-      title.textContent = signal.aborted ? "条件が変わりました。問い合わせ先を確認し直してください。"
-        : accepted ? `${plan.count}店への問い合わせを始めます。` : "問い合わせは行っていません。希望を変更してください。";
+      title.textContent = signal.aborted ? "条件が変わりました。確認先を確認し直してください。"
+        : accepted ? `${plan.count}店への空席・メニューの確認を始めます。` : "空席・メニューの確認は行っていません。希望を変更してください。";
       document.getElementById("ns-input")?.focus();
       resolve(accepted);
     };

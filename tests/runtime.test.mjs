@@ -110,7 +110,7 @@ test("conditions changed during confirmation refuse the old proposal", async () 
 
 test("comparison schema requires the query's version and registered shop IDs", async () => {
   const ctx = context();
-  const candidates = [{ shopId: "akari", status: "declined", summary: "利用者が問い合わせを拒否しました。" }];
+  const candidates = [{ shopId: "akari", status: "declined", summary: "希望の人数では予約を受け付けていません。" }];
   await assert.rejects(call(ctx, "website_show_candidates", { candidates }), /Missing arguments.expectedVersion/);
   assert.equal((await call(ctx, "website_show_candidates", { candidates, expectedVersion: App.page.version })).result.count, 1);
 });

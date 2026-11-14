@@ -160,7 +160,7 @@ try {
   assert.equal(noMatches.result.count, 0);
   assert.equal(await page.locator(".finder-inquiry-actions").count(), 0);
   await beginInquiry("中華", "横浜");
-  assert.match(await page.locator(".finder-inquiry").last().textContent(), /1店に問い合わせ/);
+  assert.match(await page.locator(".finder-inquiry").last().textContent(), /1店のAIで空席・メニューを確認/);
   assert.match(await page.locator(".finder-inquiry").last().textContent(), /広東 龍/);
   assert.doesNotMatch(await page.locator(".finder-inquiry").last().textContent(), /炉端 灯/);
   assert.equal(shopRequests.length, before);
@@ -174,7 +174,7 @@ try {
   assert.match(await callShop(2), /declined/);
   assert.equal(shopRequests.length, before);
   await beginInquiry("中華", "横浜");
-  await page.getByRole("button", { name: "問い合わせる", exact: true }).click();
+  await page.getByRole("button", { name: "確認する", exact: true }).click();
   assert.equal((await page.evaluate(() => window.finderTest.pending)).result.approved, true);
   await assert.rejects(callShop(0), /先に/);
   assert.equal(shopRequests.length, before);
@@ -189,9 +189,9 @@ try {
     document.getElementById("ns-msgs").append(message);
   });
   await beginInquiry("", "");
-  assert.match(await page.locator(".finder-inquiry").last().textContent(), /3店に問い合わせ/);
+  assert.match(await page.locator(".finder-inquiry").last().textContent(), /3店のAIで空席・メニューを確認/);
   assert.equal(shopRequests.length, afterFiltered);
-  await page.getByRole("button", { name: "問い合わせる", exact: true }).click();
+  await page.getByRole("button", { name: "確認する", exact: true }).click();
   await page.evaluate(() => window.finderTest.pending);
   for (const index of [0, 1, 2]) await callShop(index);
   assert.equal(await page.locator(".ns-consent").count(), 0);
@@ -210,12 +210,14 @@ try {
     const receipt = await dispatchToolCall(ctx, table.toolByName.get("website_show_candidates"), { expectedVersion: App.page.version, candidates: [
       { shopId: "akari", status: "available", remaining: 14, durationMinutes: 120, seatOnly: true, courseId: "winter", courseName: "冬の炉端コース", priceText: "1人5,000円 / 12名60,000円", avoidResult: "えび：記載なし。安全の保証ではありません。", summary: "テスト応答：空きあり" },
       { shopId: "trattoria-sole", status: "full", summary: "テスト応答：必要な席数がありません" },
-      { shopId: "kanton-ryu", status: "declined", summary: "利用者が問い合わせを拒否しました" },
+      { shopId: "kanton-ryu", status: "declined", summary: "希望の人数では予約を受け付けていません" },
     ] }, null, []);
     if (receipt.status !== "succeeded" || !receipt.result.ok) throw new Error("Comparison tool did not succeed");
   });
   const currentResults = page.locator('#ns-msgs .finder-results[data-current="true"]');
   assert.equal(await currentResults.locator(".candidate-card").count(), 3);
+  assert.match(await currentResults.innerText(), /予約不可/);
+  assert.doesNotMatch(await currentResults.innerText(), /問い合わせを拒否|確認見送り/);
   assert.equal(await page.locator(".candidate-card").count(), 3);
   assert.equal(await currentResults.locator("h3").first().textContent(), "炉端 灯");
   await currentResults.locator(".candidate-button").first().click();
@@ -242,6 +244,8 @@ try {
   assert.doesNotMatch(await currentResults.textContent(), /表示しない/);
   assert.equal(await page.locator('.finder-results[data-current="false"] .candidate-button:enabled').count(), 0);
   // Clearing the conversation also removes its comparisons; no separate panel remains.
+  assert.equal(await page.locator("#ns-newchat").isVisible(), false);
+  await page.locator(".assistant-chat-menu > summary").click();
   await page.locator("#ns-newchat").click();
   assert.equal(await page.locator(".finder-results").count(), 0);
   assert.equal(await page.evaluate(() => window.finderTest.App.page.candidates.length), 0);

@@ -148,6 +148,24 @@ export class FinderPage {
     return { ok: true, url: url.href, shop: clone(shop), conditions: clone(c) };
   }
 
+  /**
+   * The shop's page as this site frames it: with the current conditions in the fragment when they
+   * are complete, and the plain page otherwise. The same allowlist as a move to the shop's site.
+   */
+  framedShopUrl(shopId) {
+    const shop = this.shops.find(item => item.id === shopId);
+    const validation = validateConditions(this.conditions, this.now());
+    if (!validation.ok) return { url: shop.pageUrl, conditions: null };
+    const c = validation.conditions;
+    const url = new URL(shop.pageUrl);
+    const hash = new URLSearchParams({ aw: "v1", date: c.date, time: c.time, people: String(c.partySize), course: c.course });
+    if (c.budgetPerPerson !== undefined) hash.set("budget", String(c.budgetPerPerson));
+    if (c.avoid.length) hash.set("avoid", c.avoid.join(","));
+    url.hash = hash.toString();
+    const { note: _note, ...shared } = c;
+    return { url: url.href, conditions: clone(shared) };
+  }
+
   openShopPage(args) {
     const check = this.checkOpenShop(args);
     if (!check.ok) return check;

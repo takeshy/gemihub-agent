@@ -6,6 +6,8 @@ import { App } from "./script.js";
 import { allergenLabel, COURSE_LABELS } from "./finder.js";
 import { mountAISetup } from "./ai-setup.js";
 import { ShopInquiries, installInquiryPolicy, reviewShopInquiries } from "./inquiries.js";
+import { ShopFrame } from "./shop-frame.js";
+import { LlmRelay } from "./llm-relay.js";
 
 /**
  * Boots the browser runtime in the page's assistant section.
@@ -55,6 +57,13 @@ export class AssistantMount {
       App.inquiries = new ShopInquiries(() => App.page, reviewShopInquiries,
         () => [...document.querySelectorAll("#ns-msgs .ns-msg.user")].at(-1)?.textContent || "");
       installInquiryPolicy(booted.engine, App.inquiries);
+      const engine = booted.engine;
+      const model = () => engine.modelOverride || engine.top.network.config.llm_config.model_name;
+      App.shopFrame = new ShopFrame({
+        shops: App.page.shops, getPage: () => App.page, modelName: model, storage: AssistantMount.tabStorage(),
+        // The setup the visitor applied here: the relay sends their key to this router and nowhere else.
+        relay: new LlmRelay({ getSetup: () => ({ router: engine.routerOverride || engine.top.llm.baseUrl, key: engine.mockLLM ? "" : engine.byokKey, model: model() }) }),
+      });
       // Without a key the chat cannot answer yet. This is the same test as the
       // runtime's "API key required" badge in runtime/ui.js.
       const needsKey = !booted.engine.mockLLM
@@ -65,6 +74,8 @@ export class AssistantMount {
       AssistantMount.greet();
       App.mountChat();
       mountAISetup(booted.engine);
+      // Last, so a shop named in the address opens once the AI setup is known.
+      App.shopFrame.mount();
       return booted.engine;
     } catch (error) {
       // The page must keep working without the assistant.
@@ -72,6 +83,10 @@ export class AssistantMount {
       console.error("Assistant startup failed", error);
       return null;
     }
+  }
+
+  static tabStorage() {
+    try { return window.sessionStorage; } catch { return null; }
   }
 
   /**

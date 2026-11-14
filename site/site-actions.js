@@ -8,7 +8,9 @@ const version = integer("同じターンに読んだ状態または条件更新�
 export function registerActions(actions) {
   const register = (name, description, effect, properties, required, execute) => actions.register({ name, description, effect,
     inputSchema: { type: "object", additionalProperties: false, properties, required }, execute });
-  register("get_finder_state", "日本時間の今日と曜日、予約条件・比較結果・versionと、確認済みのジャンル/場所を読む。nullの希望は未確認。", "read", {}, [], () => ({ ...App.page.getState(), searchPreferences: App.inquiries?.preferences || { cuisine: null, area: null } }));
+  register("get_finder_state", "日本時間の今日と曜日、予約条件・比較結果・versionと、確認済みのジャンル/場所、画面内に開いている店openShop（なければnull）を読む。nullの希望は未確認。", "read", {}, [], () => ({ ...App.page.getState(), searchPreferences: App.inquiries?.preferences || { cuisine: null, area: null }, openShop: App.shopFrame?.shop ? { id: App.shopFrame.shop.id, name: App.shopFrame.shop.name } : null }));
+  register("open_shop", "利用者が選んだ1店のページを、この画面内に開く。有効な検索条件（日時・人数・コース要否・予算・食材）はお店のページへ渡す。相談と予約は利用者がお店のページで行う。予約はしない。", "write",
+    { shopId }, ["shopId"], args => App.shopFrame?.open(args.shopId) || { ok: false, reason: "準備ができていません。" });
   register("list_registered_shops", "登録店のid・店名・エリア・料理・pageUrl・networkUrl・networkToolを読む。空席や価格は含まない。", "read",
     { area: string("任意の場所。新宿、東京、横浜など。空文字は指定なし。", 80), cuisine: string("任意のジャンル。中華、イタリアン、和食など。空文字は指定なし。", 80) }, [], args => App.page.listShops(args));
   register("confirm_shop_inquiries", "ジャンル・場所と日時人数がそろったら使う。親の情報で絞った問い合わせ先の件数をチャットに示し、一度だけ問い合わせるか聞く。approved:trueの店だけ問い合わせる。", "write", {

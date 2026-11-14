@@ -10,6 +10,7 @@ const node = (tag, content, className) => {
 
 export class App {
   static inquiries = null;
+  static shopFrame = null;
   static page = new FinderPage(shops, {
     // Leave the tool receipt time to reach the chat before leaving this document.
     navigate: url => setTimeout(() => location.assign(url), 100),
@@ -86,7 +87,15 @@ export class App {
         card.append(details);
         if (candidate.avoidResult) card.append(node("p", `食材の確認：${candidate.avoidResult}`, "allergen-note"));
       }
-      const button = node("button", "この店を見てみる", "candidate-button");
+      const chat = node("button", "店舗を開く", "candidate-chat");
+      chat.type = "button";
+      chat.addEventListener("click", () => {
+        const result = App.shopFrame?.open(shop.id);
+        if (!result) status.textContent = "AIの準備ができてから、もう一度お試しください。";
+        else if (!result.ok) status.textContent = result.reason;
+      });
+      card.append(chat);
+      const button = node("button", "条件を持ってお店のサイトへ移動", "candidate-button");
       button.type = "button";
       button.addEventListener("click", async () => {
         button.disabled = true;
@@ -123,6 +132,14 @@ export class App {
     for (const shop of shops) {
       const card = node("article", undefined, "shop-card");
       card.append(node("span", `${shop.area} / ${shop.cuisine}`, "eyebrow"), node("h3", shop.name));
+      const chat = node("button", "店舗を開く", "candidate-chat");
+      chat.type = "button";
+      chat.addEventListener("click", () => {
+        if (!App.shopFrame) return;
+        App.shopFrame.open(shop.id);
+        document.getElementById("assistant").scrollIntoView();
+      });
+      card.append(chat);
       const link = node("a", "お店のページを見る ↗");
       link.href = shop.pageUrl; link.rel = "noreferrer";
       card.append(link);

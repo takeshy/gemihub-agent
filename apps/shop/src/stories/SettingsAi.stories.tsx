@@ -1,0 +1,33 @@
+import { tr } from "../../shared/i18n";
+import React from "react";
+import type { Meta, StoryObj } from "@storybook/react-vite";
+import { Screen } from "./Screen";
+import type { LiveSection } from "../../server/live-settings";
+
+const meta = { title: "運営/設定/AIで設定", component: Screen, parameters: { layout: "fullscreen" }, render: args => <Screen key={args.scenario} {...args} /> } satisfies Meta<typeof Screen>;
+export default meta;
+type Story = StoryObj<typeof meta>;
+const open = (section: LiveSection) => async ({ canvasElement }: { canvasElement: HTMLElement }) => {
+  for (let attempt = 0; attempt < 60; attempt++) {
+    const button = canvasElement.querySelector<HTMLButtonElement>(`.live-settings-${section} .section-top button`);
+    if (button && !button.disabled) { button.click(); button.scrollIntoView({ block: "center" }); return; }
+    await new Promise(resolve => setTimeout(resolve, 50));
+  }
+  throw new Error("AI settings button did not become available");
+};
+export const Basic: Story = { name: "メモ・URLからお店の基本情報を設定", args: { scenario: "manage-basic" }, play: open("basic") };
+export const Menus: Story = { name: "メモ・URLからメニューを設定", args: { scenario: "manage-menus" }, play: open("menus") };
+export const Staff: Story = { name: "メモ・URLからスタッフを設定", args: { scenario: "manage-staff" }, play: open("staff") };
+export const Hours: Story = { name: "メモ・URLから営業時間を設定", args: { scenario: "manage-hours" }, play: open("hours") };
+export const Rules: Story = { name: "メモ・URLから予約ルールを設定", args: { scenario: "manage-rules" }, play: open("rules") };
+
+export const Refunds: Story = {
+  name: "メモから返金率を変更する", args: { scenario: "manage-payment" },
+  play: async context => {
+    await open("rules")(context);
+    const panel = context.canvasElement.querySelector(".live-settings-rules")!;
+    const textarea = panel.querySelector<HTMLTextAreaElement>(".settings-ai textarea")!;
+    Object.getOwnPropertyDescriptor(HTMLTextAreaElement.prototype, "value")!.set!.call(textarea, tr("12時間前まで80%返金、1時間前まで50%返金に変更。ほかの返金条件はそのまま。"));
+    textarea.dispatchEvent(new Event("input", { bubbles: true }));
+  },
+};

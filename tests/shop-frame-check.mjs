@@ -1,5 +1,5 @@
 // Optional browser check of a shop opened inside this site, with its assistant's model
-// requests relayed here: against the real shop server (gemihub-restaurant started with
+// requests relayed here: against the real shop server (apps/shop started with
 // AGENT_PARENT_URL set to this site). The LLM provider's replies are intercepted fixtures:
 // no real model request is sent. Reservations are made on the demo server only.
 import assert from "node:assert/strict";

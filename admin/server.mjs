@@ -5,8 +5,9 @@ import { resolve } from "node:path";
 import { resolveShop } from "../scripts/resolve-shop.mjs";
 import { createShopStore } from "./store.mjs";
 import { suggestCuisine } from "../scripts/suggest-cuisine.mjs";
+import { createGoogleAuth, trustedIntegration } from "./google-auth.mjs";
 
-async function body(req) {
+async function body(req, limit = 1024 * 1024) {
   if (!/^application\/json(?:\s*;|$)/i.test(req.headers["content-type"] || "")) {
     const error = new Error("JSONで送信してください"); error.status = 415; throw error;
   }
@@ -14,14 +15,14 @@ async function body(req) {
   let size = 0;
   for await (const chunk of req) {
     size += chunk.length;
-    if (size > 1024 * 1024) { const error = new Error("送信内容が大きすぎます"); error.status = 413; throw error; }
+    if (size > limit) { const error = new Error("送信内容が大きすぎます"); error.status = 413; throw error; }
     chunks.push(chunk);
   }
   try { return JSON.parse(Buffer.concat(chunks).toString("utf8")); }
   catch { throw new Error("JSONを読み込めませんでした"); }
 }
 
-export function createAdminServer({ root = fileURLToPath(new URL("../", import.meta.url)), production = false, store = createShopStore({ root, production }), resolver = resolveShop, geminiApiKey = process.env.GEMINI_API_KEY || "", cuisineSuggester = suggestCuisine } = {}) {
+export function createAdminServer({ root = fileURLToPath(new URL("../", import.meta.url)), production = false, store = createShopStore({ root, production }), resolver = resolveShop, geminiApiKey = process.env.GEMINI_API_KEY || "", cuisineSuggester = suggestCuisine, auth = createGoogleAuth({ root }), integrationSecret = process.env.PARENT_INTEGRATION_SECRET || "", shopOrigin = process.env.SHOP_ADMIN_ORIGIN || "http://127.0.0.1:3000", fetch: fetchImpl = globalThis.fetch } = {}) {
   return createServer(async (req, res) => {
     const send = (status, data) => {
       req.resume();
@@ -37,10 +38,34 @@ export function createAdminServer({ root = fileURLToPath(new URL("../", import.m
       const hosts = [`127.0.0.1:${port}`, `localhost:${port}`, ...(port === 80 ? ["127.0.0.1", "localhost"] : [])];
       if (!hosts.includes(req.headers.host)) return send(403, { error: "ローカルの管理画面からアクセスしてください" });
       const origin = `http://${req.headers.host}`;
-      if (!["GET", "HEAD"].includes(req.method) && req.headers.origin !== origin) return send(403, { error: "管理画面と同じOriginから操作してください" });
-      if (req.headers["sec-fetch-site"] === "cross-site") return send(403, { error: "別サイトからはアクセスできません" });
       const url = new URL(req.url, origin);
       if (url.origin !== origin) return send(403, { error: "接続先が不正です" });
+      if (req.method === "POST" && url.pathname === "/api/internal/mail") {
+        if (!trustedIntegration(req, integrationSecret) || !auth) return send(403, { error: "メールの依頼元を確認できません" });
+        const message = await body(req, 15 * 1024 * 1024);
+        await auth.mail(message, message.senderEmail);
+        return send(200, { ok: true });
+      }
+      if (!["GET", "HEAD"].includes(req.method) && req.headers.origin !== origin) return send(403, { error: "管理画面と同じOriginから操作してください" });
+      const oauthReturn = req.method === "GET" && url.pathname === "/auth/google/callback";
+      const pageNavigation = req.method === "GET" && url.pathname === "/" && req.headers["sec-fetch-mode"] === "navigate" && req.headers["sec-fetch-dest"] === "document";
+      if (req.headers["sec-fetch-site"] === "cross-site" && !oauthReturn && !pageNavigation) return send(403, { error: "別サイトからはアクセスできません" });
+      if (auth && req.method === "GET" && url.pathname === "/auth/google") return await auth.begin(res, origin);
+      if (auth && req.method === "GET" && url.pathname === "/auth/google/callback") return await auth.callback(req, res, url, origin);
+      const user = auth ? await auth.session(req) : { email: "test-operator@example.com" };
+      if (req.method === "GET" && url.pathname === "/api/session") return send(200, auth ? auth.status(user) : { user, configured: true });
+      if (req.method === "POST" && url.pathname === "/api/logout") { if (auth) await auth.logout(req, res, origin); return send(200, { ok: true }); }
+      if (url.pathname.startsWith("/api/") && !user) return send(401, { error: "運営者としてGoogleにログインしてください" });
+      if (req.method === "POST" && url.pathname === "/api/invitations") {
+        if (integrationSecret.length < 32) return send(503, { error: "店舗への招待設定が必要です" });
+        const target = new URL(shopOrigin);
+        if (target.protocol !== "https:" && !(target.protocol === "http:" && ["127.0.0.1", "localhost", "[::1]"].includes(target.hostname))) return send(503, { error: "店舗アプリのURL設定を確認してください" });
+        const input = await body(req);
+        const response = await fetchImpl(new URL("/api/platform/invitations", target), { method: "POST", redirect: "error", signal: AbortSignal.timeout(20000), headers: { "Content-Type": "application/json", Origin: target.origin, Authorization: `Bearer ${integrationSecret}` }, body: JSON.stringify({ email: input.email, name: input.name, industry: input.industry, senderEmail: user.email }) });
+        if (!response.ok) { const error = await response.json().catch(() => ({})); return send(response.status, { error: error.error || "招待メールを送信できませんでした" }); }
+        await response.body?.cancel();
+        return send(200, { ok: true, message: "招待メールを送りました。" });
+      }
       if (req.method === "GET" && url.pathname === "/api/shops") return send(200, await store.get());
       if (req.method === "POST" && url.pathname === "/api/resolve") {
         const input = await body(req);

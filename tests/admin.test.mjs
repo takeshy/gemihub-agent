@@ -97,7 +97,7 @@ test("successful refresh clears an earlier error and production saves build HTTP
 async function apiFixture(t, options = {}) {
   const { root, store } = await fixture(t);
   const calls = [];
-  const server = createAdminServer({ root, store, resolver: async (url, opts) => { calls.push({ url, opts }); if (url === "fail") throw new Error("解決失敗"); return { shop: { id: "preview" }, cache: {} }; }, ...options });
+  const server = createAdminServer({ auth: false, root, store, resolver: async (url, opts) => { calls.push({ url, opts }); if (url === "fail") throw new Error("解決失敗"); return { shop: { id: "preview" }, cache: {} }; }, ...options });
   await new Promise((accept, reject) => { server.once("error", reject); server.listen(0, "127.0.0.1", accept); });
   t.after(() => new Promise(resolve => server.close(resolve)));
   const port = server.address().port;

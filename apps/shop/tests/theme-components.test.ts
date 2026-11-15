@@ -1,0 +1,201 @@
+import { test } from "node:test";
+import assert from "node:assert/strict";
+import { sample, shopSchema } from "../server/domain.ts";
+import { standardTheme, hasThemeFrame } from "../shared/theme-editing.ts";
+import { splitThemeStyles, sharedThemeCss } from "../shared/theme-styles.ts";
+import { themePart, themeSchema } from "../shared/presentation.ts";
+import { proposeVisualAppearance, validateVisualChange, visualTargets } from "../server/visual.ts";
+import { scopedConfig } from "../server/pages.ts";
+import { designOf, restoreDesign } from "../server/design-versions.ts";
+import { exampleTheme } from "../src/stories/themes.ts";
+
+const config = () => shopSchema.parse({ ...structuredClone(sample), appearance: { accent: "sage", layout: "standard", imageUrl: "", theme: structuredClone(exampleTheme) } });
+
+test("splitting accepted CSS preserves repeated-selector cascade, conditions and unknown rules", () => {
+  const css = '.panel{color:red}button{color:blue}.panel{color:green}@media(max-width:600px){.icon{color:gold}input{padding:5px}}.unknown{display:grid}@keyframes pulse{from{opacity:0}to{opacity:1}}';
+  const theme = { ...standardTheme, css };
+  const split = splitThemeStyles(theme);
+  assert.equal(split.css, "");
+  assert.deepEqual(split.styles!.map(style => style.component), ["cards", "buttons", "cards", "icons", "forms", "base"]);
+  assert.match(sharedThemeCss(split), /color:red[\s\S]*color:blue[\s\S]*color:green/);
+  assert.match(split.styles![3].css, /@media\(max-width:600px\)\{\.icon\{color:gold\}/);
+  assert.match(sharedThemeCss(split), /\.unknown\{display:grid\}/);
+  assert.match(sharedThemeCss(split), /@keyframes pulse/);
+  assert.deepEqual(splitThemeStyles(split), split);
+  assert.equal(theme.css, css);
+  assert.doesNotThrow(() => themeSchema.parse(split));
+});
+
+test("all surfaces combine shared components and their own part CSS with unchanged safety and limits", () => {
+  const c = config(), theme = c.appearance!.theme!;
+  for (const part of ["header", "body", "footer"] as const) {
+    const css = themePart(theme, part)!.css;
+    assert.match(css, /button\.primary/);
+    assert.ok(css.endsWith(theme[`${part}Css`]!));
+    for (const other of ["header", "body", "footer"] as const) if (other !== part) assert.ok(!css.includes(theme[`${other}Css`]!));
+  }
+  assert.equal(themeSchema.safeParse({ ...standardTheme, css: ':root{--large:"' + "x".repeat(16000) + '"}' }).success, true);
+  assert.equal(themeSchema.safeParse({ ...standardTheme, css: "x".repeat(24001) }).success, false);
+  for (const invalid of [
+    { ...theme, styles: [{ id: "unsafe", component: "buttons", css: "button{background:url(https://example.com/track)}" }] },
+    { ...theme, styles: [theme.styles![0], theme.styles![0]] },
+    { ...theme, styles: [{ id: "long", component: "base", css: "x".repeat(12001) }] },
+  ]) assert.equal(themeSchema.safeParse(invalid).success, false);
+});
+
+test("an icon-only AI edit receives relevant components and preserves every unrelated component and business field", async () => {
+  const before = config();
+  const media = { mimeType: "image/png" as const, data: "aGVsbG8=" };
+  const messages = [{ role: "user" as const, text: "Keep the current layout and use a calm green." }];
+  assert.ok(visualTargets(before).some(target => target.id === "component:icons"));
+  const { config: next } = await proposeVisualAppearance(before, "Make the icon green", [], { target: "component:icons", media, messages, generate: async request => {
+    const context = JSON.parse(request.contents[0].parts![0].text!);
+    assert.deepEqual(context.previousMessages, messages);
+    assert.deepEqual(request.contents[0].parts!.at(-1), { inlineData: media });
+    assert.deepEqual(context.appearance.theme.styles.map((style: { component: string }) => style.component), ["base", "icons"]);
+    assert.equal(context.appearance.theme.headerCss, undefined);
+    assert.equal(context.appearance.theme.bodyCss, undefined);
+    assert.equal(context.appearance.theme.footerCss, undefined);
+    assert.equal(context.screens, undefined);
+    assert.equal(context.screenDefaults, undefined);
+    assert.equal(context.themeDefault, undefined);
+    assert.equal(request.timeoutMs, 180000, "each generation call gets its own 180-second limit");
+    assert.ok(context.componentElements.some((element: { selector: string; description: string }) => element.selector === ".booking-summary .line-flower" && element.description.includes("Text flower")), "the real booking glyph is identified independently of SVG styles");
+    assert.ok(!("appearance" in (request.schema.properties as object)));
+    assert.doesNotMatch(JSON.stringify(request.schema), /"(?:minItems|maxItems)":/);
+    assert.match(JSON.stringify(request.schema), /At most 32 items\./);
+    assert.ok(context.styleCatalog.some((style: { component: string }) => style.component === "buttons"));
+    return JSON.stringify({ cssEdits: [{ field: "style", styleId: "icons", selector: ".icon", declarations: [{ property: "color", value: "#008000" }] }] });
+  } });
+  assert.match(next.appearance!.theme!.styles!.find(style => style.id === "icons")!.css, /#008000/);
+  assert.deepEqual(next.appearance!.theme!.styles!.filter(style => style.component !== "icons"), before.appearance!.theme!.styles!.filter(style => style.component !== "icons"));
+  assert.deepEqual({ ...next, appearance: before.appearance }, before);
+  for (const mutate of [
+    (c: typeof next) => { c.appearance!.theme!.styles![2].css = "button{color:red}"; },
+    (c: typeof next) => { c.appearance!.theme!.bodyCss = "main{padding:99px}"; },
+    (c: typeof next) => { c.menus[0].price++; },
+  ]) { const c = structuredClone(next); mutate(c); assert.throws(() => validateVisualChange(before, c, "component:icons")); }
+  const legacy = { ...before, appearance: { ...before.appearance!, theme: { ...standardTheme, css: '.icon{color:red}.panel{padding:20px}' } } };
+  const generated = await proposeVisualAppearance(legacy, "Change the icon", [], { target: "component:icons", generate: async () => JSON.stringify({ styleEdits: [{ id: "split-1", component: "icons", css: ".icon{color:blue}" }] }) });
+  assert.equal(generated.config.appearance!.theme!.css, "");
+  assert.equal(generated.config.appearance!.theme!.styles![1].css, ".panel{padding:20px}");
+  assert.doesNotThrow(() => validateVisualChange(legacy, generated.config, "component:icons"));
+});
+
+test("publication and restoration keep shared components, frame CSS and separate parts in their scopes", () => {
+  const before = config(), local = config();
+  local.appearance!.theme!.styles![2].css = "button{color:green}";
+  local.appearance!.theme!.bodyCss = "main{padding:40px}";
+  local.appearance!.theme!.headerCss = "header{padding:90px}";
+  const shared = scopedConfig(before, local, { kind: "shared" });
+  assert.equal(shared.appearance!.theme!.headerCss, before.appearance!.theme!.headerCss);
+  assert.equal(shared.appearance!.theme!.bodyCss, local.appearance!.theme!.bodyCss);
+  assert.deepEqual(shared.appearance!.theme!.styles, local.appearance!.theme!.styles);
+  const part = scopedConfig(before, local, { kind: "part", part: "header" });
+  assert.equal(part.appearance!.theme!.headerCss, local.appearance!.theme!.headerCss);
+  assert.deepEqual(part.appearance!.theme!.styles, before.appearance!.theme!.styles);
+  const restored = restoreDesign(local, designOf(before), { kind: "theme" });
+  assert.deepEqual(restored.appearance!.theme, before.appearance!.theme);
+  assert.deepEqual(restored.menus, local.menus);
+});
+
+test("news card refinement adds small rules for actual link cards without rewriting base styles", async () => {
+  const before = config();
+  before.appearance!.theme = { ...standardTheme, css: '.on-content{color:#383234}.recent-posts{padding:28px}' };
+  const split = splitThemeStyles(before.appearance!.theme!);
+  assert.ok(!split.styles!.some(style => style.component === "cards"));
+  const result = await proposeVisualAppearance(before, "お知らせとブログのカードに切れ目がほしい", [], { target: "component:cards", generate: async request => {
+    const context = JSON.parse(request.contents[0].parts![0].text!);
+    assert.equal(context.componentStyleId, "edit-cards");
+    assert.ok(context.componentElements.some((element: { selector: string }) => element.selector === ".recent-post-list > a"));
+    assert.ok(context.componentElements.some((element: { selector: string; description: string }) => element.selector === ".recent-post-list" && element.description.includes("wrapper")));
+    return JSON.stringify({ cssEdits: [
+      { field: "style", styleId: context.componentStyleId, selector: ".on-content .recent-post-list", declarations: [{ property: "gap", value: "16px" }] },
+      { field: "style", styleId: context.componentStyleId, selector: ".on-content .recent-post-list > a", declarations: [{ property: "border", value: "1px solid #ebdce0" }, { property: "background", value: "#fdf7f9" }] },
+    ] });
+  } });
+  const styles = result.config.appearance!.theme!.styles!;
+  assert.deepEqual(styles.filter(style => style.component !== "cards"), split.styles);
+  assert.match(styles.filter(style => style.component === "cards").map(style => style.css).join("\n"), /recent-post-list > a[\s\S]*border: 1px solid #ebdce0/);
+  assert.deepEqual({ ...result.config, appearance: before.appearance }, before);
+  assert.doesNotThrow(() => validateVisualChange(before, result.config, "component:cards"));
+});
+
+test("a part edit preserves an explicit standard-frame flag", async () => {
+  const before = config(); before.appearance!.theme!.frame = false;
+  const { config: next } = await proposeVisualAppearance(before, "Change header spacing", [], { target: "part:header", generate: async () => JSON.stringify({ appearance: { theme: { headerCss: "header{padding:40px}" } } }) });
+  assert.equal(next.appearance!.theme!.frame, false);
+  assert.doesNotThrow(() => validateVisualChange(before, next, "part:header"));
+});
+
+test("standard shops can create a component style without replacing the rest of the frame", async () => {
+  const before = structuredClone(sample);
+  const { config: next } = await proposeVisualAppearance(before, "Make icons green", [], { target: "component:icons", generate: async () => JSON.stringify({ styleEdits: [{ id: "icons", component: "icons", css: ".icon{color:green}" }] }) });
+  assert.equal(next.appearance!.theme!.headerHtml, standardTheme.headerHtml);
+  assert.equal(hasThemeFrame(next.appearance!.theme), false);
+  assert.deepEqual(validateVisualChange(before, next, "component:icons"), next);
+  assert.deepEqual(next.menus, before.menus);
+});
+
+test("the real identify/propose API accepts component targets, returns progress and leaves publication untouched", async t => {
+  const { createApp } = await import("../server/app.ts");
+  const { Store } = await import("../server/store.ts");
+  const { digest } = await import("../server/auth.ts");
+  const intelligence = await import("../server/ai.ts");
+  const store = new Store(":memory:");
+  const shop = await store.createShop("components@example.com"); shop.published = config(); await store.saveShop(shop);
+  await store.put("session", digest("components"), { user: { email: shop.owner, name: "Owner", role: "owner" }, expires: Date.now() + 600000 });
+  const media = { mimeType: "image/png" as const, data: "aGVsbG8=" };
+  let invoked = false;
+  const server = createApp(store, { ...intelligence,
+    identifyVisual: async (_media, targets) => { assert.ok(targets.some(target => target.id === "component:icons")); return { ids: ["component:icons"], explanation: "Change the icon" }; },
+    visualAppearance: async (current, instruction, images, options) => { invoked = true; assert.equal(options?.splitStyles, true); return proposeVisualAppearance(current, instruction, images, { ...options, generate: async () => JSON.stringify({ cssEdits: [{ field: "style", styleId: "icons", selector: ".icon", declarations: [{ property: "color", value: "green" }] }] }) }); },
+    visualReview: async input => { assert.deepEqual(input.media, media, "the original marks reach rendered review too");return { approved: true, issues: [] }; },
+  });
+  await new Promise<void>(resolve => server.listen(0, "127.0.0.1", resolve));
+  t.after(async () => { server.closeAllConnections(); await new Promise<void>(resolve => server.close(() => resolve())); await store.close(); });
+  const address = server.address() as import("node:net").AddressInfo;
+  const origin = `http://127.0.0.1:${address.port}`; process.env.APP_ORIGIN = origin;
+  const api = async (path: string, data?: unknown) => {
+    const response = await fetch(`${origin}/api/shops/${shop.id}/${path}`, { method: data ? "POST" : "GET", headers: { Origin: origin, Cookie: "gemihub_session=components", "Content-Type": "application/json" }, body: data ? JSON.stringify(data) : undefined });
+    assert.equal(response.status, 200); return response.json();
+  };
+  const identified = await api("visual/identify", { instruction: "Change the icon", media, displayed: shop.published, local: { base: shop.revision, source: shop.published, theme: true } });
+  const requestId = crypto.randomUUID();
+  const result = await api("visual/propose", { id: identified.id, requestId, target: "component:icons", instruction: "Change the icon", media });
+  assert.ok(invoked); assert.equal(result.visualReview.approved, true);
+  assert.match(result.config.appearance.theme.styles.find((style: { id: string }) => style.id === "icons").css, /color:green/);
+  const progress = await api(`visual/${identified.id}/progress?requestId=${requestId}`);
+  assert.equal(progress.stage, "complete");
+  assert.deepEqual(progress.lastReview, { approved: true, issues: [] });
+  assert.deepEqual((await store.shop(shop.id))!.published, shop.published);
+});
+
+test("a css-field patch after splitting edits the module that owns the selector and keeps the cascade", async () => {
+  const theme = splitThemeStyles({ ...standardTheme, css: ".primary{background:green;color:white}.panel{padding:4px}" });
+  const appearance = { accent: "sage" as const, layout: "standard" as const, imageUrl: "", theme };
+  const { applyCssEdits } = await import("../server/css-edits.ts");
+  const edited = applyCssEdits(appearance, [{ field: "css", selector: ".primary", declarations: [{ property: "background", value: "red" }] }]);
+  const css = sharedThemeCss(edited!.theme!);
+  assert.doesNotMatch(css, /background:\s*green/, "the original declaration is replaced, not shadowed");
+  assert.match(css, /\.primary\s*\{[^}]*background:\s*red[^}]*color:\s*white/);
+  assert.equal(edited!.theme!.css, "");
+  // A stale styleId falls back to the module that has the selector.
+  const stale = applyCssEdits(appearance, [{ field: "style", styleId: "missing", selector: ".panel", declarations: [{ property: "padding", value: "8px" }] }]);
+  assert.match(sharedThemeCss(stale!.theme!), /\.panel\s*\{\s*padding:\s*8px/);
+  // A selector no module has is appended after every module, so it wins over earlier rules.
+  const added = applyCssEdits(appearance, [{ field: "css", selector: ".icon-star", declarations: [{ property: "color", value: "gold" }] }]);
+  assert.match(sharedThemeCss(added!.theme!), /\.panel[\s\S]*\.icon-star\s*\{\s*color:\s*gold/);
+  assert.equal(added!.theme!.styles!.at(-1)!.component, "icons");
+});
+
+test("css edits that overflow a component limit fail as a 422 the owner can narrow", async () => {
+  const { applyCssEdits, applyStyleEdits } = await import("../server/css-edits.ts");
+  const big = `.panel{${Array.from({ length: 1040 }, (_, i) => `--v${i}:1px`).join(";")}}`;
+  const theme = { ...standardTheme, css: "", frame: true, styles: [{ id: "cards-1", component: "cards" as const, css: big }] };
+  const appearance = { accent: "sage" as const, layout: "standard" as const, imageUrl: "", theme };
+  assert.ok(big.length < 12000);
+  const declarations = Array.from({ length: 20 }, (_, i) => ({ property: `--extra-${i}`, value: "x".repeat(60) }));
+  assert.throws(() => applyCssEdits(appearance, [{ field: "style", styleId: "cards-1", selector: ".panel", declarations }]), (error: Error & { status?: number }) => error.status === 422);
+  assert.throws(() => applyStyleEdits(appearance, [{ id: "cards-1", component: "buttons", css: ".primary{color:red}" }]), (error: Error & { status?: number }) => error.status === 422);
+});

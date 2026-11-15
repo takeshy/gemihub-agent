@@ -1,0 +1,23 @@
+node_modules
+tmp/
+dist/
+.data/
+.env
+.env.*
+!.env.example
+!.env.production.example
+*.log
+storybook-static/
+
+# Local requirements supplied by the shop owner
+bin/
+
+# Terraform state, plans and operator-specific configuration
+.terraform/
+*.tfstate
+*.tfstate.*
+*.tfplan
+*.tfvars
+*.tfvars.json
+infra/backend.hcl
+.claude/

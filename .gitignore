@@ -6,3 +6,5 @@ test-results/
 tmp/
 admin/cache.json
 admin/cache.json.*.tmp
+admin/auth.json
+admin/auth.json.*.tmp

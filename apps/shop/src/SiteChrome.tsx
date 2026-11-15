@@ -1,0 +1,58 @@
+import { storefrontText } from "../shared/storefront-copy";
+import { hoursText } from "../server/domain";
+import { tr, listSeparator } from "../shared/i18n";
+import React from "react";
+import Markdown from "react-markdown";
+import type { ShopConfig } from "../server/domain";
+import { MenuImage } from "./MenuImage";
+import { ImagePicker } from "./ImageLibrary";
+import { Presentation } from "./Presentation";
+import { themePart } from "../shared/presentation";
+import { sharedThemeCss } from "../shared/theme-styles";
+import { navigationItems } from "../shared/navigation";
+import { hasThemeFrame, showsHeaderEyebrow, standardTheme } from "../shared/theme-editing";
+const days = () => [tr("日"), tr("月"), tr("火"), tr("水"), tr("木"), tr("金"), tr("土")];
+function SharedStyles({config, children}: {config: ShopConfig; children: React.ReactNode}) {
+  const css = config.appearance?.theme && sharedThemeCss(config.appearance.theme);
+  if (!css) return <>{children}</>;
+  return <Presentation design={{ html: '<slot name="content"></slot>', css }} resetStructure={false} slots={{ content: children }} fallback={children} />;
+}
+export function SiteHeader({ config: c, children, actions, imageBase, imageSuffix, resolvedImages }: { config: ShopConfig; children?: React.ReactNode; actions?: React.ReactNode; imageBase?: string; imageSuffix?: string; resolvedImages?: Record<string, string> }) {
+  const image = c.header.imageUrl || c.appearance?.imageUrl;
+  const title = <>{showsHeaderEyebrow(c.appearance?.theme) && <span className="eyebrow">{storefrontText(c, "headerEyebrow")}</span>}<h1>{c.header.title || c.name}</h1></>;
+  const subtitle = <p>{c.header.subtitle || c.description}</p>;
+  const details = c.header.showDetails && <div className="salon-details"><span>◷ {hoursText(c)}</span><span>{tr("定休日：")}{c.hours.closedWeekdays.map(d => tr("{0}曜", days()[d])).join(listSeparator()) || tr("なし")}</span></div>;
+  const hero = c.header.imageId && resolvedImages?.[c.header.imageId] ? <span className="managed-hero-image"><img src={resolvedImages[c.header.imageId]} alt={tr("{0}の画像", tr("お店の紹介"))} /></span> : c.header.imageId && imageBase ? <MenuImage imageId={c.header.imageId} imageBase={imageBase} suffix={imageSuffix} name={tr("お店の紹介")} className="managed-hero-image" /> : image ? <img className="salon-image" src={image} alt={tr("お店の紹介画像")} /> : <span className="hero-flower">✳</span>;
+  if (c.appearance?.theme && (c.appearance.theme.headerHtml !== standardTheme.headerHtml || c.appearance.theme.css || c.appearance.theme.frame || c.appearance.theme.headerCss)) return <>{actions}<Presentation design={themePart(c.appearance.theme, "header")} slots={{ title, subtitle, details, image: hero, navigation: c.header.showNavigation ? children : null }} fallback={null} imageBase={imageBase} imageSuffix={imageSuffix} resolvedImages={resolvedImages} /></>;
+  return <SharedStyles config={c}><header className="site-header">{actions}<section className="salon-hero">
+    <span className="eyebrow">{storefrontText(c, "headerEyebrow")}</span>
+    <h1>{c.header.title || c.name}</h1><p>{c.header.subtitle || c.description}</p>
+    {c.header.showDetails && <div className="salon-details"><span>◷ {hoursText(c)}</span><span>{tr("定休日：")}{c.hours.closedWeekdays.map(d => tr("{0}曜", days()[d])).join(listSeparator()) || tr("なし")}</span></div>}
+    {c.header.imageId && imageBase ? <MenuImage imageId={c.header.imageId} imageBase={imageBase} suffix={imageSuffix} name={tr("お店の紹介")} className="managed-hero-image" /> : image ? <img className="salon-image" src={image} alt={tr("お店の紹介画像")} /> : <span className="hero-flower">✳</span>}
+  </section>{c.header.showNavigation && children}</header></SharedStyles>;
+}
+export function SiteFooter({ config: c, imageBase, resolvedImages }: { config: ShopConfig; imageBase?: string; resolvedImages?: Record<string, string> }) {
+  if (c.appearance?.theme && (c.appearance.theme.footerHtml !== standardTheme.footerHtml || c.appearance.theme.css || c.appearance.theme.frame || c.appearance.theme.footerCss)) return <Presentation imageBase={imageBase} resolvedImages={resolvedImages} design={themePart(c.appearance.theme, "footer")} slots={{ content: <Markdown skipHtml disallowedElements={["img", "iframe", "script", "style", "form", "input"]}>{c.footer.text || `© ${c.name}`}</Markdown> }} fallback={null} />;
+  return <SharedStyles config={c}><footer className={`site-footer site-footer-${c.footer.alignment}`}><Markdown skipHtml disallowedElements={["img", "iframe", "script", "style", "form", "input"]}>{c.footer.text || `© ${c.name}`}</Markdown></footer></SharedStyles>;
+}
+export function ThemeBody({ config, children, imageBase, resolvedImages }: { config: ShopConfig; children: React.ReactNode; imageBase?: string; resolvedImages?: Record<string, string> }) {
+  if (!hasThemeFrame(config.appearance?.theme)) return <SharedStyles config={config}>{children}</SharedStyles>;
+  return <Presentation imageBase={imageBase} resolvedImages={resolvedImages} design={themePart(config.appearance?.theme, "body")} slots={{ content: children }} fallback={children} />;
+}
+export function ChromeEditor({ config, part, onChange, shopId }: { config: ShopConfig; part: "header" | "footer"; onChange: (config: ShopConfig) => void; shopId?: string }) {
+  return part === "header" ? <div className="chrome-editor">
+    <label>{tr("ヘッダーの見出し")}<input value={config.header.title} placeholder={config.name} onChange={e => onChange({ ...config, header: { ...config.header, title: e.target.value } })} /></label>
+    <label>{tr("ヘッダーの紹介文")}<textarea value={config.header.subtitle} placeholder={config.description} onChange={e => onChange({ ...config, header: { ...config.header, subtitle: e.target.value } })} /></label>
+    {shopId && <ImagePicker shopId={shopId} value={config.header.imageId} change={imageId => onChange({ ...config, header: { ...config.header, imageId, imageUrl: imageId ? "" : config.header.imageUrl } })} />}
+    <label>{tr("ヘッダー画像のURL（HTTPS）")}<input type="url" value={config.header.imageUrl} onChange={e => onChange({ ...config, header: { ...config.header, imageUrl: e.target.value, imageId: undefined } })} /></label>
+    <label><input type="checkbox" checked={config.header.showDetails} onChange={e => onChange({ ...config, header: { ...config.header, showDetails: e.target.checked } })} />{tr("営業時間・定休日を表示")}</label>
+    <label><input type="checkbox" checked={config.header.showNavigation} onChange={e => onChange({ ...config, header: { ...config.header, showNavigation: e.target.checked } })} />{tr("ナビゲーションを表示")}</label>
+  </div> : <div className="chrome-editor">
+    <label>{tr("フッターの本文")}<textarea rows={5} value={config.footer.text} placeholder={`© ${config.name}`} onChange={e => onChange({ ...config, footer: { ...config.footer, text: e.target.value } })} /></label>
+    <label>{tr("フッターの配置")}<select value={config.footer.alignment} onChange={e => onChange({ ...config, footer: { ...config.footer, alignment: e.target.value as "left" | "center" } })}><option value="center">{tr("中央")}</option><option value="left">{tr("左揃え")}</option></select></label>
+  </div>;
+}
+
+export function ChromePreview({ config, part, imageBase }: { config: ShopConfig; part: "header" | "footer"; imageBase?: string }) {
+  return <div className={`public-shop accent-${config.appearance?.accent || "sage"}${hasThemeFrame(config.appearance?.theme)?" custom-theme":""}`}>{part === "header" ? <SiteHeader config={config} imageBase={imageBase}><nav className="public-nav">{navigationItems(config).map(item => <span key={item.href}>{item.label}</span>)}</nav></SiteHeader> : <SiteFooter config={config} imageBase={imageBase} />}</div>;
+}

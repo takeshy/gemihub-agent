@@ -1,0 +1,28 @@
+project_id       = "geminihub-486523"
+app_domain       = "gemihub.net"
+site_domain      = "shops.gemihub.net"
+dns_project_id   = "your-dns-project"
+dns_zone         = "gemihub-net"
+# Reuse the existing apex A record and certificate-map entry owned by kiokuflow.
+manage_app_domain_dns_certificate = false
+# Existing OAuth secrets; references only, never copy payloads into tfvars.
+google_client_id_secret_ref = { project = "495062043717", name = "google-client-id", version = "1" }
+google_client_secret_ref    = { project = "495062043717", name = "google-client-secret", version = "1" }
+vertex_model     = "your-enabled-text-model"
+image_model      = "your-enabled-image-model"
+# repository = "projects/geminihub-486523/locations/asia-northeast1/connections/gemini-hub-github/repositories/gemihub"
+
+# Optional: PayPal receiving account. Secret payload is added outside Terraform.
+# paypal_client_id      = "sandbox-client-id"
+# paypal_environment    = "sandbox"
+# paypal_secret_version = "1"
+
+# Operator administration (/admin) and the optional OpenAI provider.
+# The OpenAI key payload goes to gemihub-web-openai-api-key; the invitation password to gemihub-web-access-password.
+# admin_emails       = ["operator@example.com"]
+# openai_model       = "gpt-6.1-sol"
+# openai_image_model = "gpt-image-2"
+
+# Optional E.164 numbers for the judge phone demo. Set the numbers for your deployment.
+# judge_phone_number    = ""
+# judge_phone_number_ja = ""

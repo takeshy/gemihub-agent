@@ -6,15 +6,30 @@
 
 ## 起動
 
-Node.js 22以上（店側と合わせる場合は24以上）。アプリ・ビルド・Nodeテストに追加パッケージは不要です。
+Node.js 24以上。店舗アプリを `apps/shop/` に含むnpm workspacesのモノレポです。依存関係とロックファイルはルートで管理します。
 
 ```sh
+npm ci
 npm run build
 npm test
 npm start
 ```
 
 ブラウザで **http://localhost:8090/** を開きます。`file://` では使えません。
+
+親サイト・店舗管理・飲食店3店のデモをまとめて起動する場合は、ビルド後に `npm run dev:demo` を実行します。8090・8091・3000番ポートを使い、Ctrl+Cでまとめて停止します。起動済みのプロセスがある場合は先に停止してください。`FINDER_PORT`・`ADMIN_PORT`・`SHOP_PORT` で変更できます。店舗デモはメモリ内のデータを使い、終了すると消えます。店舗ポートを変更した場合、親サイトの登録URLも管理画面で合わせてください。
+
+| コマンド | 対象 |
+| --- | --- |
+| `npm run build` / `npm test` / `npm run check` | 親サイトと店舗アプリの両方 |
+| `npm run build:finder` / `npm run test:finder` / `npm run check:finder` | 親サイトのみ |
+| `npm run build:shop` / `npm run test:shop` / `npm run check:shop` | 店舗アプリのみ |
+| `npm start` / `npm run admin` | 親サイト / 店舗管理 |
+| `npm run start:shop` / `npm run dev:shop` | 店舗アプリの通常起動 / 自動再起動 |
+
+店舗アプリの設定は `apps/shop/.env` を使います。詳しくは [店舗アプリのREADME](apps/shop/README_ja.md) と [モノレポの構成・移行記録](docs/monorepo.md) を参照してください。公開サイトの配信フォルダは従来どおり `site/` です。
+
+店舗管理と招待には、許可した運営者のGoogleログインが必要です。Gmailから招待・認証メールを送ります。設定手順とCloud Storage・メールログイン・ZIP書き出しの仕様は [保存先と認証](docs/storage-auth.md) を参照してください。
 
 店舗管理は別プロセスで起動します。
 
@@ -79,7 +94,7 @@ npm run admin -- --production
 
 ## 店舗ページと予約チャット
 
-仕様は `gemihub-restaurant/specs/parent-restaurant.md` です。
+仕様は [apps/shop/specs/parent-restaurant.md](apps/shop/specs/parent-restaurant.md) です。
 
 - 比較結果は回答文の後に表示します。「お店を開く」で店舗トップを、予約条件がある場合の「予約ページへ」で予約画面を開きます。
 - 店舗表示中は検索画面を隠し、親のヘッダーは「お店探しに戻る」だけにします。戻ると検索条件・回答・カードがそのまま残ります。
@@ -95,7 +110,7 @@ npm run test:shop-frame
 
 ## Linked sites
 
-店側は別リポジトリ `gemihub-restaurant` の担当です。現在は仕様書のローカルURLを登録しています。基本情報は店側のデモデータと照合し、炉端 灯は新宿、ソーレは渋谷、広東 龍は横浜として登録しています。
+店側の実装は `apps/shop/` にあります。現在は仕様書のローカルURLを登録しています。基本情報は店側のデモデータと照合し、炉端 灯は新宿、ソーレは渋谷、広東 龍は横浜として登録しています。
 
 | 店 | ネットワークURL | 予約ページ |
 | --- | --- | --- |
@@ -117,7 +132,7 @@ npm run check:partners -- https://your-finder-host.example
 
 店のネットワークは訪問者のブラウザで、親で選んだルーターとキーを使って動きます。店は親のキーや `website_*` を受け取りません。店のサイト操作を使わず、店自身のオリジンにある**読み取り専用MCP**で空席・材料を取得する設計です。MCPを備えていない店からはライブ情報を取得できず「確認できず」と扱います。店のmanifestは自店のMCPオリジンを許可し、MCPはCORSに対応する必要があります。
 
-公開前に全店のURLをHTTPSへ変更して `npm run build -- --production` を実行します。生成される `tools`・`link_labels`・`allowed_peers`・ツール名・CSPをまとめて更新し、ループバックURLが残っていると失敗します。再度 `check:partners` を実行してください。
+公開前に全店のURLをHTTPSへ変更して `npm run build:finder -- --production` を実行します。生成される `tools`・`link_labels`・`allowed_peers`・ツール名・CSPをまとめて更新し、ループバックURLが残っていると失敗します。再度 `check:partners` を実行してください。
 
 ## 検証
 
@@ -135,7 +150,6 @@ Nodeテストは日時・食材・人数等の入力検証、条件変更によ�
 ブラウザ検証は任意でPlaywrightを使います。`npm start` を別の端末で実行し、次を実行します。
 
 ```sh
-npm install --no-save --package-lock=false playwright
 npx playwright install chromium
 npm run test:browser
 # 既存Chromiumを使う場合:

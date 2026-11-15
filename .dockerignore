@@ -1,0 +1,17 @@
+.git
+**/node_modules
+**/dist
+**/.data
+**/.env
+**/.env.*
+!**/.env.example
+!**/.env.production.example
+**/tmp
+**/test-results
+**/storybook-static
+**/.aws
+**/.codex
+**/.agents
+**/.claude
+apps/shop/infra/*
+!apps/shop/infra/domain-controller.py

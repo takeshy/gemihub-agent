@@ -1,0 +1,100 @@
+import { test } from "node:test";
+import assert from "node:assert/strict";
+import type { AddressInfo } from "node:net";
+import { ownerEmailLogin } from "../server/owner-email-login.ts";
+import { Store, type User } from "../server/store.ts";
+import { createApp } from "../server/app.ts";
+import { sample } from "../server/domain.ts";
+import { digest } from "../server/auth.ts";
+import { google } from "googleapis";
+
+const tokenFrom = (text: string) => new URLSearchParams(new URL(text.match(/https?:\/\/[^\s]+/)![0]).hash.slice(1)).get("owner-login")!;
+test("salon invitations keep Google verification and bind signup to the invited Google email", async t => {
+  process.env.ACCESS_PASSWORD = "private-invitation-password";
+  process.env.PARENT_INTEGRATION_SECRET = "parent-secret-".repeat(4);
+  process.env.GOOGLE_CLIENT_ID = "salon-invite-client";
+  t.after(() => { delete process.env.ACCESS_PASSWORD; delete process.env.PARENT_INTEGRATION_SECRET; });
+  let identityEmail = "wrong@example.com";
+  t.mock.method(google.auth.OAuth2.prototype, "getToken", async () => ({ tokens: { id_token: "fixture", refresh_token: "fixture-refresh", scope: "openid email profile https://www.googleapis.com/auth/gmail.send https://www.googleapis.com/auth/calendar.freebusy" } }) as never);
+  t.mock.method(google.auth.OAuth2.prototype, "verifyIdToken", async () => ({ getPayload: () => ({ email_verified: true, email: identityEmail, name: "Owner" }) }) as never);
+  const store = new Store(":memory:"), mails: string[] = [];
+  const server = createApp(store, undefined, undefined, undefined, undefined, undefined, undefined, undefined, undefined, async (_to, _subject, text) => { mails.push(text); });
+  await new Promise<void>(resolve => server.listen(0, "127.0.0.1", resolve));
+  const origin = `http://127.0.0.1:${(server.address() as AddressInfo).port}`; process.env.APP_ORIGIN = origin;
+  t.after(async () => { server.closeAllConnections(); await new Promise<void>(resolve => server.close(() => resolve())); await store.close(); });
+  const invited = await fetch(origin + "/api/platform/invitations", { method: "POST", headers: { Origin: origin, "Content-Type": "application/json", Authorization: `Bearer ${process.env.PARENT_INTEGRATION_SECRET}` }, body: JSON.stringify({ email: "hair@example.com", name: "髪のお店", industry: "hair" }) });
+  assert.equal(invited.status, 200); assert.match(mails[0], /Google/); assert.equal((await store.list("shop")).length, 0);
+  async function signIn() {
+    const start = await fetch(origin + "/auth/google", { redirect: "manual" }), state = new URL(start.headers.get("location")!).searchParams.get("state");
+    return fetch(`${origin}/auth/google/callback?state=${state}&code=fixture`, { redirect: "manual", headers: { Cookie: start.headers.get("set-cookie")!.split(";")[0] } });
+  }
+  const wrong = await signIn(); assert.equal(wrong.status, 302); assert.equal((await store.list("shop")).length, 0);
+  identityEmail = "hair@example.com";
+  assert.equal((await signIn()).status, 302);
+  const [shop] = await store.list<{ owner: string; draft: { industry: string; name: string } }>("shop");
+  assert.equal(shop.owner, identityEmail); assert.equal(shop.draft.industry, "hair"); assert.equal(shop.draft.name, "髪のお店");
+  assert.equal((await store.get<User>("user", identityEmail))!.accessPending, undefined);
+  assert.equal(await store.get("ownerGoogleInvitation", digest(identityEmail)), undefined);
+});
+test("non-salon owners use a single-use email link with no Google grant or account created before confirmation", async t => {
+  delete process.env.ACCESS_PASSWORD;
+  const store = new Store(":memory:"); t.after(() => store.close());
+  const sent: string[] = [];
+  const service = ownerEmailLogin(store, async (_to, _subject, text) => { sent.push(text); });
+  await service.request({ email: "SHOP@EXAMPLE.COM", industry: "restaurant", name: "雑貨と喫茶" }, "https://shops.example.com", "requester");
+  assert.equal((await store.list("shop")).length, 0);
+  assert.equal((await store.list("user")).length, 0);
+  const token = tokenFrom(sent[0]);
+  assert.equal((await service.info({ token }, "https://shops.example.com")).email, "shop@example.com");
+  await assert.rejects(service.info({ token }, "https://other.example.com"));
+  const results = await Promise.allSettled([service.verify({ token }, "https://shops.example.com"), service.verify({ token }, "https://shops.example.com")]);
+  assert.equal(results.filter(result => result.status === "fulfilled").length, 1);
+  const user = (results.find(result => result.status === "fulfilled") as PromiseFulfilledResult<User>).value;
+  assert.equal(user.authMethod, "owner-email"); assert.equal(user.role, "owner"); assert.equal(user.refreshToken, undefined);
+  assert.equal((await store.shop(user.shopId!))!.draft!.industry, "restaurant");
+  assert.equal((await store.list("user")).length, 1);
+  await assert.rejects(service.verify({ token }, "https://shops.example.com"));
+});
+
+test("email login preserves salon Google requirements, invitations, expiration and delivery failures", async t => {
+  const store = new Store(":memory:"); t.after(() => store.close());
+  const salon = await store.createShop("salon@example.com"); salon.published = structuredClone(sample); await store.saveShop(salon);
+  const sent: string[] = [];
+  const service = ownerEmailLogin(store, async (_to, _subject, text) => { sent.push(text); });
+  await assert.rejects(service.request({ email: salon.owner, industry: "other" }, "https://shops.example.com", "salon"), /Google/);
+  await assert.rejects(service.request({ email: "new-salon@example.com", industry: "hair" }, "https://shops.example.com", "hair"));
+  process.env.ACCESS_PASSWORD = "invitation-only-password";
+  t.after(() => { delete process.env.ACCESS_PASSWORD; });
+  await assert.rejects(service.request({ email: "new@example.com" }, "https://shops.example.com", "new"), /招待/);
+  await service.request({ email: "invited@example.com", name: "招待店", industry: "other" }, "https://shops.example.com", "parent", true);
+  const token = tokenFrom(sent[0]);
+  assert.equal((await service.info({ token }, "https://shops.example.com")).invitation, true);
+  const user = await service.verify({ token }, "https://shops.example.com");
+  assert.equal((await store.shop(user.shopId!))!.draft!.industry, "other");
+  const failed = ownerEmailLogin(store, async () => { throw new Error("private Gmail response"); });
+  await assert.rejects(failed.request({ email: "failed@example.com" }, "https://shops.example.com", "failed", true), /メールを送信できません/);
+  assert.equal((await store.list<{ email: string }>("ownerEmailLogin")).some(value => value.email === "failed@example.com"), false);
+  await store.put("ownerEmailLogin", digest("x".repeat(43)), { email: "expired@example.com", industry: "other", origin: "https://shops.example.com", expires: Date.now() - 1 });
+  await assert.rejects(service.verify({ token: "x".repeat(43) }, "https://shops.example.com"));
+});
+
+test("owner email HTTP flow creates an authenticated operator; customer links and wrong origins cannot grant that access", async t => {
+  delete process.env.ACCESS_PASSWORD;
+  const store = new Store(":memory:"), mails: string[] = [];
+  const server = createApp(store, undefined, undefined, undefined, undefined, undefined, undefined, undefined, undefined, async (_to, _subject, text) => { mails.push(text); });
+  await new Promise<void>(resolve => server.listen(0, "127.0.0.1", resolve));
+  const origin = `http://127.0.0.1:${(server.address() as AddressInfo).port}`; process.env.APP_ORIGIN = origin;
+  t.after(async () => { server.closeAllConnections(); await new Promise<void>(resolve => server.close(() => resolve())); await store.close(); });
+  const post = (path: string, data: unknown, source = origin) => fetch(origin + path, { method: "POST", headers: { "Content-Type": "application/json", Origin: source }, body: JSON.stringify(data) });
+  assert.equal((await post("/api/owner-login", { email: "owner-http@example.com", industry: "other" }, "https://evil.example.com")).status, 403);
+  assert.equal((await post("/api/owner-login", { email: "owner-http@example.com", industry: "other" })).status, 200);
+  const token = tokenFrom(mails[0]);
+  const login = await post("/api/owner-login/verify", { token });
+  assert.equal(login.status, 200);
+  const session = await (await fetch(origin + "/api/session", { headers: { Cookie: login.headers.get("set-cookie")!.split(";")[0] } })).json();
+  assert.equal(session.user.role, "owner");
+  await store.put("emailLogin", digest("c".repeat(43)), { email: "owner-http@example.com", origin, shopId: session.user.shopId, expires: Date.now() + 60000 });
+  assert.equal((await post("/api/owner-login/verify", { token: "c".repeat(43) })).status, 400);
+  const workspace = await fetch(origin + "/api/workspace", { headers: { Cookie: login.headers.get("set-cookie")!.split(";")[0] } });
+  assert.equal(workspace.status, 200);
+});

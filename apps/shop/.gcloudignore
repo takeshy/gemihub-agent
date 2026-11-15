@@ -1,0 +1,16 @@
+.gcloudignore
+.git
+.gitignore
+node_modules
+dist
+.data
+.env
+.env.*
+!.env.example
+infra/*
+!infra/deploy-vm.sh
+!infra/deploy-gemihub.py
+!infra/domain-controller.py
+tmp
+storybook-static
+*.log

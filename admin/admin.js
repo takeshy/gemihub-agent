@@ -183,4 +183,21 @@ $("#shop-form").addEventListener("submit", event => {
   });
 });
 try { sessionStorage.removeItem("gemihub-admin-ai-v1"); } catch { /* Remove obsolete admin-only credentials. */ }
-run(async () => { state = await api("/api/shops"); render(); });
+$("#logout").addEventListener("click", () => run(async () => { await api("/api/logout", "POST", {}); location.reload(); }));
+$("#invite-form").addEventListener("submit", event => {
+  event.preventDefault();
+  const form = event.currentTarget;
+  const input = Object.fromEntries(new FormData(form));
+  run(async () => {
+    const result = await api("/api/invitations", "POST", input);
+    message(result.message); form.reset();
+  });
+});
+run(async () => {
+  const session = await api("/api/session");
+  $("#operator-status").textContent = session.user ? `${session.user.email} としてログイン中` : session.setupMessage || "店舗の招待・管理には、運営者のGoogleログインが必要です。";
+  $("#google-login").hidden = !!session.user || !session.configured;
+  $("#logout").hidden = !session.user;
+  $("#add-shop").hidden = $("#registry").hidden = $("#invitations").hidden = !session.user;
+  if (session.user) { state = await api("/api/shops"); render(); }
+});

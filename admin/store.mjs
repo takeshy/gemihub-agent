@@ -19,10 +19,10 @@ async function readOptional(file) {
   try { return await readFile(file); } catch (error) { if (error.code === "ENOENT") return null; throw error; }
 }
 
-export async function atomicWrite(file, data) {
+export async function atomicWrite(file, data, options = {}) {
   await mkdir(resolve(file, ".."), { recursive: true });
   const temporary = `${file}.${randomUUID()}.tmp`;
-  try { await writeFile(temporary, data, { flag: "wx" }); await rename(temporary, file); }
+  try { await writeFile(temporary, data, { ...options, flag: "wx" }); await rename(temporary, file); }
   finally { await rm(temporary, { force: true }); }
 }
 

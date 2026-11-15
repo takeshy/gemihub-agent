@@ -1,0 +1,27 @@
+steps:
+  - id: image
+    name: gcr.io/cloud-builders/docker
+    args: [build, --file, apps/shop/Dockerfile, --tag, '${_IMAGE}', .]
+  - id: push
+    name: gcr.io/cloud-builders/docker
+    args: [push, '${_IMAGE}']
+  - id: deploy-vm
+    name: gcr.io/google.com/cloudsdktool/cloud-sdk
+    entrypoint: bash
+    args:
+      - apps/shop/infra/deploy-vm.sh
+      - '${_SHARED_PROJECT}'
+      - '${_SHARED_ZONE}'
+      - '${_SHARED_INSTANCE}'
+      - '${_IMAGE}'
+      - '${_DEPLOY}'
+images: ['${_IMAGE}']
+substitutions:
+  _IMAGE: asia-northeast1-docker.pkg.dev/${PROJECT_ID}/gemihub-web/gemihub-web:${BUILD_ID}
+  _DEPLOY: 'true'
+  _SHARED_PROJECT: geminihub-486523
+  _SHARED_INSTANCE: shared-apps
+  _SHARED_ZONE: asia-northeast1-b
+options:
+  logging: CLOUD_LOGGING_ONLY
+  dynamicSubstitutions: true

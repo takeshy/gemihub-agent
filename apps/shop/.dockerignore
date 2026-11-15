@@ -1,0 +1,11 @@
+.git
+node_modules
+dist
+.data
+.env
+.env.*
+!.env.example
+infra/*
+!infra/domain-controller.py
+tmp
+storybook-static

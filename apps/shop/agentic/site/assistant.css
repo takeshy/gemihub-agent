@@ -1,0 +1,148 @@
+/* Chat is a separate screen; closing it preserves the page and conversation. */
+.assistant-sidebar { position: fixed; inset: 0; z-index: 30; width: 100%; height: 100dvh; display: flex; flex-direction: column; background: #fff; color: var(--ink); }
+.assistant-sidebar-header, .ai-setup-header { display: flex; align-items: center; justify-content: space-between; gap: 12px; }
+.assistant-sidebar-header { flex: none; padding: 16px; border-bottom: 1px solid var(--line); }
+.assistant-sidebar-header h2 { flex: 1; margin: 0; font-size: 18px; }
+.assistant-chat-menu { position: relative; flex: none; }
+.assistant-chat-menu > summary { display: grid; place-items: center; list-style: none; width: 32px; height: 32px; border-radius: 6px; color: var(--muted); font-size: 24px; cursor: pointer; }
+.assistant-chat-menu > summary::-webkit-details-marker { display: none; }
+.assistant-chat-menu > summary:hover { background: var(--soft); }
+.assistant-chat-menu > summary:focus-visible { outline: 2px solid var(--shop-primary); outline-offset: 2px; }
+.assistant-chat-menu > button { position: absolute; right: 0; top: calc(100% + 6px); z-index: 2; width: max-content; min-width: 160px; padding: 10px 14px; border: 1px solid var(--line); border-radius: 8px; background: #fff; color: var(--ink); box-shadow: 0 4px 16px #0002; text-align: left; font: 14px/1.5 system-ui, sans-serif; cursor: pointer; }
+.assistant-icon-button { flex: none; width: 40px; height: 40px; padding: 0; border: 1px solid var(--line); border-radius: 8px; background: #fff; color: var(--ink); font: 26px/1 system-ui, sans-serif; cursor: pointer; }
+.assistant-icon-button:focus-visible, .assistant-options button:focus-visible { outline: 2px solid var(--shop-primary); outline-offset: 2px; }
+.assistant-sidebar-content { flex: 1; min-height: 0; display: flex; flex-direction: column; padding: 0 16px max(12px, env(safe-area-inset-bottom)); }
+.assistant-lead { margin: 12px 0 8px; font-size: 14px; color: var(--muted); }
+.assistant-options { display: flex; align-items: start; justify-content: space-between; gap: 12px; font-size: 13px; }
+.assistant-options button { flex: none; border: 0; padding: 4px 0; background: none; color: var(--shop-primary); text-decoration: underline; font: inherit; cursor: pointer; }
+.assistant-options button:disabled { opacity: .5; cursor: wait; }
+.assistant-info { min-width: 0; text-align: right; }
+.assistant-info summary { padding: 4px 0; cursor: pointer; }
+.assistant-info[open] { max-height: 180px; overflow: auto; }
+.assistant-info p { text-align: left; }
+#assistant-status { margin: 8px 0; font-size: 13px; color: var(--muted); }
+body.assistant-open { overflow: hidden; }
+
+/* The runtime reads these variables for its chat, settings and agent panels.
+   The chat background below also uses --ns-bg. White text sits on --ns-primary (the
+   visitor's messages, Send, and the chat form and settings buttons) and on --ns-accent
+   (Send while a turn is steered), so give both at least 4.5:1 contrast with white.
+   --ns-accent also underlines the chat header. */
+#agent-app {
+  flex: 1;
+  min-height: 0;
+  display: flex;
+  flex-direction: column;
+  --ns-font: system-ui, sans-serif;
+  --ns-bg: #ffffff;
+  --ns-fg: #1f2328;
+  --ns-primary: #2563eb;
+  --ns-accent: #2563eb;
+  --ns-border: #d0d7de;
+  --ns-panelbg: #ffffff;
+  --ns-msgbg: #f6f8fa;
+  --ns-muted: #59636e;
+}
+
+#agent-app [data-ns-slot="header"], #agent-app [data-ns-slot="agents"], #agent-app .ns-action-status { display: none !important; }
+#agent-app.ns-composed-app [data-ns-slot="chat"] { flex: 1; min-height: 0; }
+.assistant-sidebar #agent-app.ns-composed-app [data-ns-slot="chat"] > .ns-chat { height: 100%; min-height: 0; }
+
+/* Keep the runtime's settings fields and save handler inside a native modal. */
+.ai-setup { width: min(520px, calc(100vw - 32px)); max-height: calc(100dvh - 32px); overflow: auto; padding: 20px; border: 1px solid var(--line); border-radius: 14px; color: var(--ink); background: #fff; font: 14px/1.6 system-ui, sans-serif; }
+.ai-setup::backdrop { background: #0006; }
+.ai-setup-header h2 { margin: 0; font-size: 20px; }
+.ai-setup > label { display: grid; gap: 4px; font-weight: 600; }
+.ai-setup select { width: 100%; padding: 8px; border: 1px solid var(--line); border-radius: 6px; background: #fff; color: var(--ink); font: inherit; }
+.ai-setup a { color: var(--shop-primary); }
+#agent-app .ai-setup .ns-settings { border: 0; font-size: 14px; }
+#agent-app .ai-setup .ns-settings > summary, #agent-app .ai-setup .ns-key-help { display: none; }
+#agent-app .ai-setup .ns-settings-body { padding: 0; }
+#agent-app .ai-setup #ns-apply { padding: 10px 18px; margin: 8px 0; }
+/* The runtime gives the chat no background of its own. Keep --ns-msgbg different from
+   --ns-bg, or bot replies lose their bubble. */
+#agent-app .ns-chat { background: var(--ns-bg); }
+
+/* Site-wide form rules often stretch the runtime's own controls. Undo them here. */
+#agent-app input[type="checkbox"],
+#agent-app input[type="radio"] { width: auto; }
+#agent-app .ns-header { flex-wrap: wrap; }
+/* Site label rules add margins and bold text, and the inputs inside the labels inherit
+   the weight. */
+#agent-app .ns-settings-body label { margin: 4px 0; font-weight: 400; }
+/* Chat forms label radio groups with a legend, so site legend fonts would reach them. */
+#agent-app .ns-w-label { font-family: inherit; }
+/* Site label rules add margins to chat form fields and make their options bold. */
+#agent-app .ns-widget label { margin: 0; }
+#agent-app .ns-w-radio label,
+#agent-app .ns-w-multi label,
+#agent-app .ns-w-toggle { font-weight: 400; }
+/* The runtime sizes radio and multi-choice options but not the checkbox label. */
+#agent-app .ns-w-toggle { font-size: 13px; }
+/* The runtime spaces its buttons with gap. A site's button margin pushes Send below the input. */
+#agent-app button { margin: 0; }
+/* Chat choices are buttons with a light background. A site's button color can hide their
+   titles. */
+#agent-app .ns-w-choice { color: var(--ns-fg); }
+/* A site's button:hover background also reaches the runtime's plain buttons, behind
+   their dark text. Keep the runtime's own backgrounds. */
+#agent-app .ns-devtoggle:not(.on):hover,
+#agent-app .ns-modal-close:hover { background: transparent; }
+#agent-app .ns-w-choice:disabled:hover { background: #fafbfc; }
+/* The runtime's message rule hides the partner consent card's own background, and its
+   Decline label then has too little contrast. */
+#agent-app .ns-consent { background: #fffbeb; }
+/* While a consent card waits, the status line above it already says "Contacting", though
+   nothing has been sent. Hide it until the visitor answers. */
+#agent-app .ns-msgs:has(.ns-consent-actions) > .ns-turn-status { display: none; }
+/* Long links in a reply would run out of the bubble on a phone. "anywhere" would also
+   let the consent card's buttons shrink and split their labels. */
+#agent-app .ns-msg { overflow-wrap: break-word; }
+/* On a phone the consent card is too narrow for its three buttons in one row, and
+   "Always allow" breaks onto two lines. Keep each label whole and wrap the row. */
+#agent-app .ns-consent-actions { flex-wrap: wrap; }
+#agent-app .ns-consent-actions button { white-space: nowrap; }
+
+/* site.js and the runtime add their confirmation dialogs to <body>, outside #agent-app.
+   Site h2 rules reach the heading, and the two buttons touch. A right margin keeps
+   wrapped buttons lined up on the left. */
+body > dialog h2 { margin: 0 0 12px; font: 700 1.25em system-ui, sans-serif; }
+body > dialog button { margin-right: 8px; }
+/* site.js's dialog: the details in two columns, and a plain decline button, so the two
+   choices do not look the same. */
+.assistant-review { max-width: 640px; width: 85%; max-height: 85vh; overflow: auto; border: 1px solid #888; border-radius: 12px; padding: 24px; font: 16px system-ui, sans-serif; }
+.assistant-review dl { display: grid; grid-template-columns: fit-content(40%) 1fr; gap: 4px 16px; margin: 12px 0; }
+.assistant-review dt { font-weight: 600; }
+.assistant-review dd { margin: 0; overflow-wrap: anywhere; }
+.assistant-review details { margin: 12px 0; }
+.assistant-review pre { white-space: pre-wrap; overflow-wrap: anywhere; }
+.assistant-review .assistant-decline { background: transparent; color: inherit; border: 1px solid currentColor; }
+
+@media (max-width: 760px) {
+  /* On a phone, each detail goes under its label, so an email is not split. */
+  .assistant-review dl { grid-template-columns: 1fr; gap: 0; }
+  .assistant-review dd { margin-bottom: 8px; }
+}
+
+.assistant-back-button { flex:none; padding:8px 12px; border:1px solid var(--line); border-radius:8px; background:#fff; color:var(--ink); font:14px/1.5 system-ui,sans-serif; cursor:pointer; }
+.carried-conditions { border:1px solid var(--ns-border); }
+.carried-conditions button { border:0; border-radius:6px; padding:8px 16px; background:var(--ns-primary); color:#fff; font:inherit; cursor:pointer; }
+html[data-embedded="true"] #ai-settings-open, html[data-embedded="true"] .assistant-info,
+html[data-embedded="true"] #agent-app [data-ns-slot="settings"], html[data-embedded="true"] #agent-app .ns-settings { display:none !important; }
+
+/* The confirmation dialog, which sits under <body>, outside #agent-app. */
+dialog.assistant-review { max-width: min(520px, calc(100vw - 32px)); padding: 24px; border: 1px solid var(--line); border-radius: 12px; color: var(--ink); }
+dialog.assistant-review::backdrop { background: rgba(0, 0, 0, 0.45); }
+dialog.assistant-review h2 { margin: 0 0 8px; font-size: 20px; }
+dialog.assistant-review h2:focus { outline: none; }
+dialog.assistant-review dl { display: grid; grid-template-columns: max-content 1fr; gap: 6px 16px; margin: 16px 0; }
+dialog.assistant-review dt { color: var(--muted); }
+dialog.assistant-review dd { margin: 0; font-weight: 600; overflow-wrap: anywhere; }
+dialog.assistant-review details { margin: 12px 0; font-size: 13px; color: var(--muted); }
+dialog.assistant-review pre { overflow: auto; max-height: 200px; padding: 8px; background: var(--soft); border-radius: 6px; }
+dialog.assistant-review button { margin: 8px 8px 0 0; padding: 10px 18px; border-radius: 8px; border: 1px solid var(--shop-primary); background: var(--shop-primary); color: #fff; font: inherit; font-weight: 700; cursor: pointer; }
+dialog.assistant-review button.assistant-decline { background: #fff; color: var(--ink); border-color: var(--line); }
+
+/* The dialog is outside the assistant, so it owns its theme variables. */
+dialog.assistant-review { --shop-primary: #7a3b1d; --ink: #1f2328; --muted: #59636e; --line: #d0d7de; --soft: #f6f4f1; font: 16px/1.6 system-ui, sans-serif; }
+html[data-embedded="true"] #ai-settings-open, html[data-embedded="true"] .assistant-info { display: none; }

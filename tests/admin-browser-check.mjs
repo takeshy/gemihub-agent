@@ -45,7 +45,7 @@ try {
   shopWebsite = createRetailFixture(guideCalls);
   await new Promise((accept, reject) => { shopWebsite.once("error", reject); shopWebsite.listen(0, "127.0.0.1", accept); });
   const retailOrigin = `http://127.0.0.1:${shopWebsite.address().port}`;
-  admin = createAdminServer({ root: scratch, geminiApiKey: "fixture-cuisine-key", cuisineSuggester: (details, config) => suggestCuisine(details, { ...config, fetch: async (url, options) => {
+  admin = createAdminServer({ auth: false, root: scratch, geminiApiKey: "fixture-cuisine-key", cuisineSuggester: (details, config) => suggestCuisine(details, { ...config, fetch: async (url, options) => {
     assert.equal(url, GEMINI_DECISIONS_URL);
     return fetch(`http://127.0.0.1:${cuisineAI.address().port}/v1beta/decisions`, options);
   } }) });

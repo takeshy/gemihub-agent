@@ -6,10 +6,12 @@
   "engines": { "node": ">=22" },
   "scripts": {
     "build": "node scripts/build.mjs",
+    "admin": "node admin/server.mjs",
     "check": "node scripts/build.mjs --check",
     "start": "node vendor/agentify-website/scripts/serve_site.mjs site --port 8090 --open-as localhost",
     "test": "node --test \"tests/*.test.mjs\"",
     "test:browser": "node tests/browser-check.mjs",
+    "test:admin": "node tests/admin-browser-check.mjs",
     "test:shop-frame": "node tests/shop-frame-check.mjs",
     "check:partners": "node scripts/check-partners.mjs"
   }

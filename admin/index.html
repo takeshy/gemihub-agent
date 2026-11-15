@@ -1,0 +1,53 @@
+<!doctype html>
+<html lang="ja">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>店舗管理 · お店さがし</title>
+  <link rel="stylesheet" href="/admin.css">
+  <script type="module" src="/admin.js"></script>
+</head>
+<body>
+  <main>
+    <header class="page-header">
+      <div><p class="eyebrow">お店さがし / ローカル管理</p><h1>つながるお店</h1><p>店のURLから情報を読み込み、問い合わせ先に追加します。</p></div>
+      <button id="add-shop" type="button">＋ 店を追加</button>
+    </header>
+    <p id="mode" class="note"></p>
+    <div id="message" role="status" aria-live="polite" hidden></div>
+    <section aria-label="登録店一覧" class="panel">
+      <p class="note mobile-note">表は横にスクロールできます。</p>
+      <div class="table-scroll"><table>
+        <thead><tr><th>店名</th><th>エリア</th><th>ジャンル</th><th>オリジン</th><th>状態</th><th>操作</th></tr></thead>
+        <tbody id="shops"></tbody>
+      </table></div>
+      <p id="empty" class="note" hidden>登録店はありません。「店を追加」から始めてください。</p>
+    </section>
+    <section id="editor" class="panel editor" aria-labelledby="editor-title" hidden>
+      <div class="section-header"><h2 id="editor-title">店を追加</h2><button id="close-editor" class="secondary" type="button">閉じる</button></div>
+      <form id="resolve-form">
+        <label for="source-url">店のURL</label>
+        <div class="url-row"><input id="source-url" type="url" placeholder="https://お店のドメイン/ または http://127.0.0.1:3000/s/akari" required><button id="resolve" type="submit">読み込む</button></div>
+        <p class="note">トップ・予約ページ・エージェントのURLを使えます。ジャンルは手入力してください。</p>
+      </form>
+      <form id="choice-form" hidden>
+        <label for="network-choice">予約用エージェントを選択</label><select id="network-choice"></select><button type="submit">選んで読み込む</button>
+      </form>
+      <p id="preview-message" role="status" class="note"></p>
+      <div id="differences" hidden><h3>取り直した情報</h3><p class="note">反映したい項目にチェックを入れてください。選ばない項目は現在の値を使います。</p><div id="diff-fields"></div><button id="apply-differences" type="button" class="secondary">選んだ項目を反映</button></div>
+      <form id="shop-form" hidden>
+        <div class="fields">
+          <label>店のID<input name="id" pattern="[a-z0-9][a-z0-9-]{0,79}" maxlength="80" required><span class="note">英小文字・数字・ハイフン。保存後は変更できません。</span></label>
+          <label>店名<input name="name" required></label>
+          <label>エリア<input name="area" placeholder="例: 東京都新宿区" required></label>
+          <label>ジャンル（手入力）<input name="cuisine" placeholder="例: 和食・炉端焼き" required></label>
+          <label class="wide">予約ページURL<input name="pageUrl" type="url" required></label>
+          <label class="wide">ネットワークURL<input name="networkUrl" type="url" required></label>
+        </div>
+        <dl id="metadata"></dl>
+        <div class="save-row"><p class="note">保存すると公開サイトのファイルを作り直します。</p><button type="submit">保存</button></div>
+      </form>
+    </section>
+  </main>
+</body>
+</html>

@@ -129,3 +129,24 @@ test("transport timeouts cover reading response bodies", async () => {
 test("infers prefecture and municipality without the street address", () => {
   for (const [address, area] of [["東京都新宿区新宿1", "東京都新宿区"], ["神奈川県横浜市中区1", "神奈川県横浜市"], ["大阪府大阪市北区1", "大阪府大阪市"], ["北海道札幌市中央区", "北海道札幌市"], ["京都府京都市東山区", "京都府京都市"], ["福岡県糟屋郡志免町1", "福岡県糟屋郡志免町"], ["海外の住所", ""]]) assert.equal(inferArea(address), area);
 });
+
+test("AI supplies an editable cuisine default using fetched shop facts", async () => {
+  const result = await resolveShop(base, { ...fixture(), suggestCuisine: async details => {
+    assert.deepEqual(details, { name: info.shop, description: info.description, existingCuisines: [] });
+    return "和食・炉端焼き";
+  } });
+  assert.equal(result.shop.cuisine, "和食・炉端焼き");
+  assert.equal(result.cache.status, "connected");
+});
+test("AI failure leaves the shop connected and allows manual cuisine input", async () => {
+  const result = await resolveShop(base, { ...fixture(), suggestCuisine: async () => { throw new Error("AIの設定を確認してください"); } });
+  assert.equal(result.shop.cuisine, "");
+  assert.equal(result.cache.status, "connected");
+  assert.equal(result.warning, "AIの設定を確認してください");
+});
+test("refresh preserves an operator's cuisine and does not call AI again", async () => {
+  const shop = (await resolveShop(base, fixture())).shop;
+  shop.cuisine = "手で直したジャンル";
+  const result = await resolveShop(base, { ...fixture(), editingId: shop.id, shops: [shop], suggestCuisine: async () => { assert.fail("must preserve the manual genre"); } });
+  assert.equal(result.shop.cuisine, shop.cuisine);
+});

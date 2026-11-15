@@ -10,7 +10,7 @@
 <body>
   <main>
     <header class="page-header">
-      <div><p class="eyebrow">お店さがし / ローカル管理</p><h1>つながるお店</h1><p>店のURLから情報を読み込み、問い合わせ先に追加します。</p></div>
+      <div><p class="eyebrow">お店さがし / ローカル管理</p><h1>つながるお店</h1><p>店のURLから情報を読み込み、紹介するお店に追加します。</p></div>
       <button id="add-shop" type="button">＋ 店を追加</button>
     </header>
     <p id="mode" class="note"></p>
@@ -28,10 +28,10 @@
       <form id="resolve-form">
         <label for="source-url">店のURL</label>
         <div class="url-row"><input id="source-url" type="url" placeholder="https://お店のドメイン/ または http://127.0.0.1:3000/s/akari" required><button id="resolve" type="submit">読み込む</button></div>
-        <p class="note">トップ・予約ページ・エージェントのURLを使えます。ジャンルは手入力してください。</p>
+        <p class="note">トップ・予約ページ・エージェントのURLを使えます。ジャンルはAIが入力します。内容は編集でき、店舗は保存するまで変更しません。</p>
       </form>
       <form id="choice-form" hidden>
-        <label for="network-choice">予約用エージェントを選択</label><select id="network-choice"></select><button type="submit">選んで読み込む</button>
+        <label for="network-choice">問い合わせ先のエージェントを選択</label><select id="network-choice"></select><button type="submit">選んで読み込む</button>
       </form>
       <p id="preview-message" role="status" class="note"></p>
       <div id="differences" hidden><h3>取り直した情報</h3><p class="note">反映したい項目にチェックを入れてください。選ばない項目は現在の値を使います。</p><div id="diff-fields"></div><button id="apply-differences" type="button" class="secondary">選んだ項目を反映</button></div>
@@ -40,9 +40,12 @@
           <label>店のID<input name="id" pattern="[a-z0-9][a-z0-9-]{0,79}" maxlength="80" required><span class="note">英小文字・数字・ハイフン。保存後は変更できません。</span></label>
           <label>店名<input name="name" required></label>
           <label>エリア<input name="area" placeholder="例: 東京都新宿区" required></label>
-          <label>ジャンル（手入力）<input name="cuisine" placeholder="例: 和食・炉端焼き" required></label>
-          <label class="wide">予約ページURL<input name="pageUrl" type="url" required></label>
-          <label class="wide">ネットワークURL<input name="networkUrl" type="url" required></label>
+          <label>ジャンル（編集可）<input name="cuisine" placeholder="例: 雑貨・生活雑貨、和食・炉端焼き" maxlength="80" required></label>
+          <label class="wide">紹介文<textarea name="description" rows="3" maxlength="2000" placeholder="お店の特徴や扱っている商品・サービス"></textarea></label>
+          <label class="wide">店舗ページURL<input name="pageUrl" type="url" required></label>
+          <label class="wide">ネットワークURL（任意・AIの問い合わせ先）<input name="networkUrl" type="url"><span class="note">エージェントがある場合だけ入力します。予約対応とは別です。</span></label>
+          <label class="wide check-field"><input name="reservationEnabled" type="checkbox">予約ページも案内する</label>
+          <label class="wide" id="reservation-url-field" hidden>予約ページURL<input name="reservationUrl" type="url"></label>
         </div>
         <dl id="metadata"></dl>
         <div class="save-row"><p class="note">保存すると公開サイトのファイルを作り直します。</p><button type="submit">保存</button></div>

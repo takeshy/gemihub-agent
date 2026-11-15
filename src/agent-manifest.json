@@ -1,17 +1,18 @@
 {
-  "brand": "お店さがし予約エージェント",
+  "brand": "お店さがし",
   "networks": [
     {
       "name": "reservation_finder",
       "front_man": "finder_front",
       "hocon": "./reservation_finder.network.json",
-      "description": "日時・人数などを聞き、各店のAIで空席やメニューを確認して比べます。席だけの予約から宴会まで。予約はお店のページで。",
+      "description": "雑貨店などのお店紹介から、飲食店の予約相談まで。ジャンルや場所でお店を見つけ、店舗サイトをご案内します。",
       "tags": [
         "agentified-website",
         "restaurant-reservation",
         "multi-site"
       ],
       "sample_queries": [
+        "新宿で贈り物が見つかる雑貨店を教えて",
         "今夜19時に2人、席だけ空いている店は？",
         "12月18日19時から12人、1人5000円以内のコースで探して",
         "えびが食べられない人がいる。対応できる店は？",
@@ -29,7 +30,7 @@
   "peer_policy": {
     "mode": "closed",
     "deny_origins": [],
-    "note": "Calls only registered shop networks after visitor consent. No cross-site reservation actions."
+    "note": "Calls registered shop agents only after visitor consent. Agent connectivity does not imply reservation support."
   },
   "agent_mcp": {
     "protocol": "nsdeploy-agent-mcp/v1",
@@ -78,7 +79,8 @@
       "confirm_shop_inquiries",
       "show_candidates",
       "open_shop",
-      "open_shop_page"
+      "open_shop_page",
+      "show_shop_introductions"
     ]
   }
 }

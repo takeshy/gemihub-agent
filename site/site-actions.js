@@ -8,15 +8,19 @@ const version = integer("同じターンに読んだ状態または条件更新�
 export function registerActions(actions) {
   const register = (name, description, effect, properties, required, execute) => actions.register({ name, description, effect,
     inputSchema: { type: "object", additionalProperties: false, properties, required }, execute });
-  register("get_finder_state", "日本時間の今日と曜日、予約条件・比較結果・version、ジャンル/場所、確認中の範囲inquiryBatch、画面内に開いている店openShopを読む。nullの希望は未指定。候補14店以下なら希望の追加質問は不要。", "read", {}, [], () => ({ ...App.page.getState(), searchPreferences: App.inquiries?.preferences || { cuisine: null, area: null }, inquiryBatch: App.inquiries?.batchState() || null, openShop: App.shopFrame?.shop ? { id: App.shopFrame.shop.id, name: App.shopFrame.shop.name } : null }));
-  register("open_shop", "利用者が選んだ1店のページを、この画面内に開く。有効な検索条件（日時・人数・コース要否・予算・食材）はお店のページへ渡す。相談と予約は利用者がお店のページで行う。予約はしない。", "write",
+  register("get_finder_state", "日本時間の今日と曜日、予約条件・比較結果・version、ジャンル/場所、確認中のinquiryBatch、openShopを読む。valid/reasonは予約条件の検証だけを表し、falseでも店舗紹介は利用できる。紹介に日時・人数は不要。nullの希望は未指定。候補14店以下なら追加質問は不要。", "read", {}, [], () => ({ ...App.page.getState(), searchPreferences: App.inquiries?.preferences || { cuisine: null, area: null }, inquiryBatch: App.inquiries?.batchState() || null, openShop: App.shopFrame?.shop ? { id: App.shopFrame.shop.id, name: App.shopFrame.shop.name } : null }));
+  register("open_shop", "利用者が選んだ1店のページをこの画面内に開く。予約条件は予約対応の店にだけ渡す。商品確認や予約の手続きは店舗サイトで行う。予約非対応店にはtarget=shopを使う。", "write",
     { shopId, target: { type: "string", enum: ["shop", "reserve"], description: "shop=お店のページ、reserve=予約ページ。利用者が予約を希望した場合はreserve。" } }, ["shopId"], args => App.shopFrame?.open(args.shopId, { target: args.target || "shop" }) || { ok: false, reason: "準備ができていません。" });
-  register("list_registered_shops", "登録店のid・店名・エリア・料理・pageUrl・networkUrl・networkToolを読む。空席や価格は含まない。", "read",
-    { area: string("任意の場所。新宿、東京、横浜など。空文字は指定なし。", 80), cuisine: string("任意のジャンル。中華、イタリアン、和食など。空文字は指定なし。", 80) }, [], args => App.page.listShops(args));
-  register("confirm_shop_inquiries", "日時人数がそろったら使う。候補15店以上のときだけ未指定のジャンル・場所を聞く。全候補数と今回確認する最大4店を表示する。approved:trueのshopsだけ確認し、続きは利用者の次の発話後にnextOffsetで進む。", "write", {
+  register("list_registered_shops", "登録店のid・店名・エリア・ジャンル・紹介文・店舗URL・エージェントURL・予約対応を読む。エージェントの有無と予約対応は独立。紹介は日時や人数なしで使える。空席・在庫・価格は含まない。", "read",
+    { area: string("任意の場所。新宿、東京、横浜など。空文字は指定なし。", 80), cuisine: string("任意のジャンル。雑貨、文具、中華など。空文字は指定なし。", 80), query: string("店名・ジャンル・紹介文で探す商品や目的のキーワード。例: 贈り物、万年筆。", 200), purpose: { type: "string", enum: ["introduction", "reservation"], description: "introduction=全登録店から紹介（既定）。reservation=予約ページのある店だけ。" } }, [], args => App.page.listShops(args));
+  register("show_shop_introductions", "登録情報に基づくお店の紹介カードを表示する。雑貨店など予約非対応の店にも使い、日時・人数を求めない。紹介文は登録データを使う。", "write",
+    { shopIds: { type: "array", maxItems: App.page.shops.length, items: shopId } }, ["shopIds"], args => App.page.showIntroductions(args));
+  register("confirm_shop_inquiries", "店のエージェントへ接続する前に対象と内容を確認する。予約の空席確認は日時人数をそろえる。商品・店舗情報はpurpose=introductionとqueryを指定し、日時人数は不要。エージェントのない店へは接続しない。最大4店ずつ確認する。", "write", {
     cuisine: string("希望ジャンル。未指定なら空文字。候補15店以上では未確認の希望を聞いてから進む。", 80),
     area: string("希望の場所。未指定なら空文字。指定なし・どこでもでも進められる。", 80), expectedVersion: version,
     offset: integer("最初は0。続きの確認を利用者が希望したらinquiryBatch.nextOffset。条件変更後は0に戻す。", Number.MAX_SAFE_INTEGER),
+    purpose: { type: "string", enum: ["reservation", "introduction"], description: "reservation=予約の空席・メニュー確認（既定）。introduction=商品や店舗情報への問い合わせ。" },
+    query: string("店舗情報への問い合わせ内容。名前・連絡先・キーを含めない。", 140),
   }, ["cuisine", "area", "expectedVersion"], args => App.inquiries?.confirm(args) || { ok: false, reason: "空席・メニューの確認の準備ができていません。" });
   register("set_reservation_conditions", "利用者がチャットで指定した予約条件を保存し、古い比較結果を消す。予約は行わない。更新後の条件とversionを返す。", "write", {
     date: string("日本時間の実在する日付 YYYY-MM-DD。今日の日付はget_finder_stateから読む。", 10),

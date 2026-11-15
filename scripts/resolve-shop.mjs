@@ -3,11 +3,12 @@ import { safeName } from "../site/runtime/runner.js";
 import { parseHocon } from "../site/runtime/hocon.js";
 import { readJsonRpcResponse } from "../site/runtime/mcp.js";
 import { validateShops } from "./shops.mjs";
+import { extractShopPage } from "./shop-html.mjs";
 
 export const messages = {
   url: "HTTPSのURLを入れてください（ローカルは http://127.0.0.1 可）",
   manifest: "このURLにはエージェントの案内（agent-manifest.json）が見つかりません",
-  network: "予約用のエージェント（reservation_concierge）が公開されていません",
+  network: "公開エージェントのネットワークが見つかりません",
   mcp: "店の情報を読み込めませんでした。名前などを手で入れて保存できます",
   duplicate: "同じ店がすでに登録されています",
 };
@@ -84,7 +85,7 @@ export function createShopTransport({ fetch: fetchImpl = globalThis.fetch, produ
   };
 }
 
-export async function resolveShop(input, { shops = [], editingId, networkIndex, production = false, fetch, timeout, now = () => new Date() } = {}) {
+export async function resolveShop(input, { shops = [], editingId, networkIndex, discovery = false, production = false, fetch, timeout, suggestCuisine, now = () => new Date() } = {}) {
   const inputUrl = normalizeShopUrl(input, { production });
   const base = shopBase(inputUrl);
   const request = createShopTransport({ fetch, production, timeout });
@@ -93,43 +94,69 @@ export async function resolveShop(input, { shops = [], editingId, networkIndex, 
     if (url.origin !== inputUrl.origin) throw new Error("店と異なるオリジンの接続先は許可されていません");
     return url.href;
   };
-  let manifest;
+  let manifest, inputPage;
   try { manifest = await request(`${base}/agent/agent-manifest.json`); }
   catch {
     try {
-      const page = await request(inputUrl, {}, response => response.text());
+      const page = await request(inputUrl.pathname.includes("/agent/") ? `${base}/` : inputUrl, {}, response => response.text());
+      inputPage = page;
       const link = manifestLink(page.value);
-      if (!link) throw new Error(messages.manifest);
-      manifest = await request(sameOrigin(link, page.url));
-    } catch { throw new Error(messages.manifest); }
+      if (link) manifest = await request(sameOrigin(link, page.url));
+      else if (!discovery) throw new Error(messages.manifest);
+    } catch {
+      if (!discovery) throw new Error(messages.manifest);
+      if (!inputPage) throw new Error("店舗ページを読み込めませんでした。URLとサイトの起動状態を確認してください。");
+    }
   }
-  const networks = manifest.value?.networks?.filter(entry => entry.name === "reservation_concierge") || [];
+  const websitePreview = async () => {
+    inputPage ||= await request(inputUrl.pathname.includes("/agent/") ? `${base}/` : inputUrl, {}, response => response.text());
+    const info = extractShopPage(inputPage.value);
+    const id = editingId || slug(base);
+    if (shops.some(shop => shop.id !== editingId && (shop.id === id || shop.pageUrl === inputPage.url))) throw new Error(messages.duplicate);
+    const previous = shops.find(shop => shop.id === editingId);
+    const shop = { id, name: info.name, area: inferArea(info.address), cuisine: previous?.cuisine || "", pageUrl: inputPage.url, networkUrl: "", description: info.description, reservationEnabled: previous?.reservationEnabled ?? false };
+    if (shop.reservationEnabled && previous?.reservationUrl) shop.reservationUrl = previous.reservationUrl;
+    const cache = { fetchedAt: now().toISOString(), description: info.description, status: "connected", reservationSummary: "" };
+    let warning;
+    if (!shop.cuisine && shop.name && suggestCuisine) {
+      try { shop.cuisine = await suggestCuisine({ name: shop.name, description: shop.description, existingCuisines: shops.map(item => item.cuisine), includeShops: true }); }
+      catch (error) { warning = error.message; }
+    }
+    validateShops({ version: 1, shops: [...shops.filter(item => item.id !== editingId), { ...shop, name: shop.name || "未入力", area: shop.area || "未入力", cuisine: shop.cuisine || "未入力" }] }, { production });
+    return { shop, cache, ...(warning ? { warning } : {}) };
+  };
+  if (discovery && !manifest) return websitePreview();
+  const networks = manifest.value?.networks?.filter(entry => discovery ? typeof entry.name === "string" && /^[a-z0-9_-]+$/i.test(entry.name) : entry.name === "reservation_concierge") || [];
+  if (discovery && !networks.length) return websitePreview();
   if (!networks.length) throw new Error(messages.network);
   if (networks.length > 1 && networkIndex === undefined) return {
     choices: networks.map((entry, index) => ({ index, name: entry.name, description: entry.description || "", hocon: entry.hocon })),
   };
   const entry = networks[networkIndex ?? 0];
   if (!entry || typeof entry.hocon !== "string" || !entry.hocon) throw new Error(messages.network);
-  const networkUrl = sameOrigin("reservation_concierge", manifest.url);
+  const networkUrl = sameOrigin(entry.name, manifest.url);
   const networkFile = await request(sameOrigin(entry.hocon, manifest.url), {}, response => response.text());
-  const network = new AgentNetwork(parseHocon(networkFile.value), "reservation_concierge");
+  const network = new AgentNetwork(parseHocon(networkFile.value), entry.name);
   const validation = validateNetwork(network);
   if (validation.errors.length) throw new Error(`ネットワーク定義が不正です: ${validation.errors.join("\n")}`);
   if (!entry.front_man || !network.config.tools?.some(tool => tool.name === entry.front_man)) throw new Error("ネットワークの窓口が見つかりません");
   const toolName = safeName(parseExternalAgent(networkUrl, inputUrl.origin).agentName);
   const otherShops = shops.filter(shop => shop.id !== editingId);
   const id = editingId || slug(base);
-  if (otherShops.some(shop => shop.id === id || safeName(parseExternalAgent(shop.networkUrl, new URL(shop.networkUrl).origin).agentName) === toolName)
+  if (otherShops.some(shop => shop.id === id || (shop.networkUrl && safeName(parseExternalAgent(shop.networkUrl, new URL(shop.networkUrl).origin).agentName) === toolName))
       || ["condition_checker", "finder_front", "render_cruse"].includes(toolName) || toolName.startsWith("website_")) throw new Error(messages.duplicate);
 
-  const shop = { id, name: "", area: "", cuisine: "", pageUrl: `${base}/reserve`, networkUrl };
+  const shop = { id, name: "", area: "", cuisine: shops.find(item => item.id === editingId)?.cuisine || "", pageUrl: `${base}/reserve`, networkUrl };
+  if (discovery) { shop.pageUrl = `${base}/`; shop.reservationEnabled = false; shop.description = ""; }
   const cache = { fetchedAt: now().toISOString(), description: "", reservationSummary: "", status: "needs-review" };
   let warning;
+  let metadataUnavailable = false;
   try {
     // Prefer the actual MCP used by the network; agent-mcp.json may describe an unavailable facade.
     const refs = network.config.tools.flatMap(agent => agent.tools || []);
     let endpoint = refs.find(ref => ref && typeof ref === "object" && typeof ref.url === "string" && (!ref.tools || ref.tools.includes("get_shop_info")))?.url;
     endpoint ||= refs.find(ref => typeof ref === "string" && /(?:\/mcp(?:\/|$)|\/\/mcp\.)/.test(ref));
+    if (discovery && !endpoint) { metadataUnavailable = true; throw new Error("Shop metadata is not declared by this agent"); }
     if (!endpoint) {
       const declaration = (await request(sameOrigin("agent-mcp.json", manifest.url))).value;
       if (declaration.available === false) throw new Error("MCP unavailable");
@@ -158,10 +185,17 @@ export async function resolveShop(input, { shops = [], editingId, networkIndex, 
     const result = await rpc("tools/call", { name: "get_shop_info", arguments: {} });
     if (result?.isError) throw new Error("get_shop_info failed");
     const info = result?.structuredContent || JSON.parse((result?.content || []).filter(part => part.type === "text").map(part => part.text).join("\n"));
-    if (typeof info.shop !== "string" || !info.shop.trim()) throw new Error("店名がありません");
-    shop.name = info.shop;
+    const name = typeof info.shop === "string" ? info.shop : info.name;
+    if (typeof name !== "string" || !name.trim()) throw new Error("店名がありません");
+    shop.name = name;
     shop.area = inferArea(info.address);
-    if (info.reservePageUrl) shop.pageUrl = sameOrigin(info.reservePageUrl, `${base}/`);
+    if (!discovery && info.reservePageUrl) shop.pageUrl = sameOrigin(info.reservePageUrl, `${base}/`);
+    if (discovery) {
+      shop.pageUrl = sameOrigin(info.shopPageUrl || info.pageUrl || `${base}/`, `${base}/`);
+      const previous = shops.find(item => item.id === editingId);
+      shop.reservationEnabled = previous?.reservationEnabled ?? !!(info.reservation && info.reservePageUrl);
+      if (shop.reservationEnabled) shop.reservationUrl = sameOrigin(previous?.reservationUrl || info.reservePageUrl || `${base}/reserve`, `${base}/`);
+    }
     cache.description = typeof info.description === "string" ? info.description : "";
     const reservation = info.reservation;
     cache.reservationSummary = reservation ? [
@@ -169,8 +203,25 @@ export async function resolveShop(input, { shops = [], editingId, networkIndex, 
       typeof reservation.seatOnlyAllowed === "boolean" ? `席のみ${reservation.seatOnlyAllowed ? "可" : "不可"}` : "",
     ].filter(Boolean).join("、") : "";
     cache.status = "connected";
-  } catch { warning = messages.mcp; }
+  } catch { if (!metadataUnavailable) warning = messages.mcp; }
+  if (discovery) {
+    if (!shop.name || !cache.description) {
+      try {
+        const page = inputPage || await request(`${base}/`, {}, response => response.text());
+        const info = extractShopPage(page.value);
+        shop.name ||= info.name || (typeof manifest.value.brand === "string" ? manifest.value.brand : "");
+        shop.area ||= inferArea(info.address);
+        cache.description ||= info.description;
+      } catch { /* Keep editable fields if the page cannot be read. */ }
+    }
+    shop.description = cache.description.slice(0, 2000);
+    if (metadataUnavailable && shop.name) cache.status = "connected";
+  }
+  if (!shop.cuisine && shop.name && suggestCuisine) {
+    try { shop.cuisine = await suggestCuisine({ name: shop.name, description: cache.description, existingCuisines: shops.map(item => item.cuisine), ...(discovery ? { includeShops: true } : {}) }); }
+    catch (error) { warning = [warning, error.message].filter(Boolean).join("\n"); }
+  }
   // Use the shared validator for all persisted fields, even while a manual preview is incomplete.
-  validateShops({ version: 1, shops: [...otherShops, { ...shop, name: shop.name || "未入力", area: shop.area || "未入力", cuisine: "未入力" }] }, { production });
+  validateShops({ version: 1, shops: [...otherShops, { ...shop, name: shop.name || "未入力", area: shop.area || "未入力", cuisine: shop.cuisine || "未入力" }] }, { production });
   return { shop, cache, ...(warning ? { warning } : {}) };
 }

@@ -25,7 +25,7 @@ export class AssistantMount {
     const english = document.documentElement.lang === "en";
     const reset = document.getElementById("ns-newchat");
     const input = document.getElementById("ns-input");
-    input.placeholder = english ? "Describe the restaurant you want…" : "行きたいお店の希望を相談…";
+    input.placeholder = english ? "Describe the shop you want…" : "行きたいお店の希望を相談…";
     input.setAttribute("aria-label", english ? "Message to the AI" : "AIへのメッセージ");
     document.getElementById("ns-send").textContent = english ? "Send" : "送信";
     const menu = document.createElement("details");
@@ -54,8 +54,7 @@ export class AssistantMount {
   }
 
   static get GREETING() {
-    return (App.page.shops.length >= 15 ? "行きたい料理のジャンルや場所はありますか？おまかせでも大丈夫です。" : "")
-      + "希望の日時と人数を教えてください。空席・メニューを確認するお店の数を先にお伝えします。";
+    return "どんなお店をお探しですか？雑貨店などのお店紹介から、飲食店の予約相談までお手伝いします。";
   }
 
   /**

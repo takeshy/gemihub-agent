@@ -3,6 +3,7 @@
 // (llm-relay.js). The visitor talks to the shop and reserves in the shop's page.
 // This site reserves nothing, and never shows a reservation as made.
 import { allergenLabel, COURSE_LABELS } from "./finder.js";
+import { canReserve, hasAgent } from "./shop-data.js";
 
 const STORAGE_KEY = "reservation-finder-shop-v1";
 const FRAME_WAIT_MS = 8000;
@@ -77,6 +78,7 @@ export class ShopFrame {
       this.showError(reason);
       return { ok: false, reason };
     }
+    if (target === "reserve" && !canReserve(shop)) return { ok: false, reason: "この店の予約ページは登録されていません。店舗ページをご覧ください。" };
     if (!this.shop) { this.previousScroll = scrollY; this.previousFocus = document.activeElement; }
     this.endRelay();
     this.shop = shop;
@@ -90,6 +92,11 @@ export class ShopFrame {
     previous.replaceWith(frame);
     frame.title = `${shop.name}${target === "reserve" ? "の予約ページ" : "のページ"}`;
     frame.src = framed.url;
+    if (!hasAgent(shop)) frame.addEventListener("load", () => {
+      clearTimeout(this.frameTimer);
+      status.dataset.state = "loaded";
+      status.textContent = "表示されない場合は、別タブでお店のサイトを開いてください。";
+    }, { once: true });
     this.element("shop-page-newtab").href = framed.url;
     const status = this.element("shop-page-status");
     status.dataset.state = "loading";
@@ -103,7 +110,7 @@ export class ShopFrame {
     this.remember();
     this.render();
     this.element("shop-close").focus();
-    return { ok: true, shop: shop.name, target, conditionsPassed: !!framed.conditions, note: "お店のページを開きました。相談と予約はこのページで行います。" };
+    return { ok: true, shop: shop.name, target, conditionsPassed: !!framed.conditions, note: "お店のページを開きました。商品・サービスや予約対応は、お店のページで確認できます。" };
   }
   close() {
     if (!this.shop) return;
@@ -128,6 +135,7 @@ export class ShopFrame {
     const frame = this.element("shop-page-frame");
     if (!fromShopFrame(event, frame.contentWindow, this.shop)) return;
     const data = event.data;
+    if (!hasAgent(this.shop) && data.type !== "gemihub:reserve-ready") return;
     if (data.type === "gemihub:reserve-ready" && data.version === 1 && data.shop === this.shop.id) {
       clearTimeout(this.frameTimer);
       this.element("shop-page-status").dataset.state = "ready";

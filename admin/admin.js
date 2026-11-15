@@ -1,13 +1,14 @@
+import { canReserve, hasAgent, reservationPageUrl, shopPageUrl } from "/shop-data.js";
+
 const $ = selector => document.querySelector(selector);
-const keys = ["id", "name", "area", "cuisine", "pageUrl", "networkUrl"];
-const labels = { name: "店名", area: "エリア", cuisine: "ジャンル", pageUrl: "予約ページURL", networkUrl: "ネットワークURL" };
+const keys = ["id", "name", "area", "cuisine", "pageUrl", "networkUrl", "description", "reservationUrl"];
+const labels = { name: "店名", area: "エリア", cuisine: "ジャンル", pageUrl: "店舗ページURL", networkUrl: "ネットワークURL", description: "紹介文", reservationUrl: "予約ページURL" };
 const statuses = { connected: "接続OK", "needs-review": "要確認", error: "エラー" };
 let state = { shops: [], cache: {} };
 let editingId;
 let metadata = {};
 let busy = false;
 let diffs = [];
-
 function element(tag, text, className) {
   const node = document.createElement(tag);
   if (text !== undefined) node.textContent = text;
@@ -20,21 +21,15 @@ async function api(path, method = "GET", data, headers = {}) {
   if (!response.ok) throw new Error(result.error || `HTTP ${response.status}`);
   return result;
 }
-function message(text, error = false, files = []) {
+function message(text, error = false) {
   const node = $("#message");
   node.replaceChildren(element("div", text));
   node.className = error ? "error" : "";
-  if (files.length) {
-    node.append(element("strong", "作り直したファイル"));
-    const list = element("ul");
-    for (const file of files) list.append(element("li", file));
-    node.append(list);
-  }
   node.hidden = false;
 }
 function buttons() {
   for (const button of document.querySelectorAll("button")) button.disabled = busy || button.dataset.unavailable === "true";
-  for (const input of document.querySelectorAll("input, select")) input.disabled = busy;
+  for (const input of document.querySelectorAll("input, select, textarea")) input.disabled = busy;
   document.body.setAttribute("aria-busy", String(busy));
 }
 async function run(operation) {
@@ -58,10 +53,10 @@ function render() {
   $("#mode").textContent = state.production ? "本番用モード · HTTPSの公開URLだけ登録できます。保存後、生成物をコミットして公開してください。" : "ローカル用モード · 保存後は公開サイトを再読み込みしてください。公開するフォルダは site/ だけです。";
   state.shops.forEach((shop, index) => {
     const row = element("tr");
-    for (const value of [shop.name, shop.area, shop.cuisine, new URL(shop.networkUrl).origin]) row.append(element("td", value));
+    for (const value of [shop.name, shop.area, shop.cuisine, new URL(shop.pageUrl).origin]) row.append(element("td", value));
     const info = state.cache[shop.id] || {};
     const status = element("td");
-    const badge = element("span", statuses[info.status] || "要確認", `badge ${info.status || ""}`);
+    const badge = element("span", info.status === "connected" && !hasAgent(shop) ? "情報取得済み" : statuses[info.status] || "要確認", `badge ${info.status || ""}`);
     badge.title = info.error || (info.fetchedAt ? `最終取得: ${info.fetchedAt}` : "まだ店の情報を取得していません");
     status.append(badge);
     if (info.error) status.append(element("div", info.error, "note"));
@@ -74,7 +69,7 @@ function render() {
         if (!confirm(`「${shop.name}」を削除しますか？`)) return;
         state = await api(`/api/shops/${encodeURIComponent(shop.id)}`, "DELETE", undefined, { "If-Match": state.revision });
         if (editingId === shop.id) $("#editor").hidden = true;
-        render(); message(state.message, false, state.files);
+        render(); message(state.message);
       }, { className: "danger" }),
       action("↑", () => move(index, -1), { unavailable: index === 0, title: `${shop.name}を上へ` }),
       action("↓", () => move(index, 1), { unavailable: index === state.shops.length - 1, title: `${shop.name}を下へ` }),
@@ -85,18 +80,32 @@ function render() {
 }
 async function save(shops, cache = {}) {
   state = await api("/api/shops", "PUT", { shops, cache, revision: state.revision });
-  render(); message(state.message, false, state.files);
+  render(); message(state.message);
 }
 async function move(index, direction) {
   const shops = [...state.shops];
   [shops[index], shops[index + direction]] = [shops[index + direction], shops[index]];
   await save(shops);
 }
-function fields() { return Object.fromEntries(keys.map(key => [key, $("#shop-form").elements.namedItem(key).value.trim()])); }
-function fill(shop) { for (const key of keys) $("#shop-form").elements.namedItem(key).value = shop[key] || ""; }
+function fields() {
+  const shop = Object.fromEntries(keys.map(key => [key, $("#shop-form").elements.namedItem(key).value.trim()]));
+  shop.reservationEnabled = $("#shop-form").elements.namedItem("reservationEnabled").checked;
+  if (!shop.reservationEnabled) delete shop.reservationUrl;
+  return shop;
+}
+function reservationFields() {
+  const enabled = $("#shop-form").elements.namedItem("reservationEnabled").checked;
+  $("#reservation-url-field").hidden = !enabled;
+  $("#shop-form").elements.namedItem("reservationUrl").required = enabled;
+}
+function fill(shop) {
+  for (const key of keys) $("#shop-form").elements.namedItem(key).value = shop[key] || "";
+  $("#shop-form").elements.namedItem("reservationEnabled").checked = !!shop.pageUrl && canReserve(shop);
+  reservationFields();
+}
 function showMetadata() {
   $("#metadata").replaceChildren();
-  for (const [key, label] of [["description", "お店の紹介"], ["reservationSummary", "予約条件"], ["fetchedAt", "最終取得"]]) {
+  for (const [key, label] of [["reservationSummary", "予約条件"], ["fetchedAt", "最終取得"]]) {
     if (metadata[key]) $("#metadata").append(element("dt", label), element("dd", metadata[key]));
   }
 }
@@ -104,12 +113,12 @@ function showEditor(shop) {
   editingId = shop?.id;
   metadata = state.cache[editingId] || {};
   $("#editor-title").textContent = shop ? `${shop.name}を編集` : "店を追加";
-  $("#source-url").value = shop?.networkUrl || "";
+  $("#source-url").value = shop ? shopPageUrl(shop) : "";
   $("#resolve").textContent = shop ? "店から取り直す" : "読み込む";
   $("#shop-form").hidden = !shop;
   $("#choice-form").hidden = $("#differences").hidden = true;
   $("#preview-message").textContent = "";
-  fill(shop || {});
+  fill(shop ? { ...shop, pageUrl: shopPageUrl(shop), reservationUrl: reservationPageUrl(shop), reservationEnabled: canReserve(shop), description: shop.description ?? metadata.description ?? "" } : {});
   $("#shop-form").elements.namedItem("id").readOnly = !!shop;
   showMetadata();
   $("#editor").hidden = false;
@@ -133,11 +142,11 @@ async function resolvePreview(networkIndex) {
       option.value = choice.index; return option;
     }));
     $("#choice-form").hidden = false;
-    $("#preview-message").textContent = "予約用エージェントが複数あります。接続先を選んでください。";
+    $("#preview-message").textContent = "エージェントが複数あります。問い合わせ先を選んでください。";
     return;
   }
   metadata = preview.cache;
-  $("#preview-message").textContent = preview.warning || "読み込みました。内容を確認し、ジャンルを入力して保存してください。";
+  $("#preview-message").textContent = preview.warning || "読み込みました。ジャンルなどを確認・編集して保存してください。まだ店舗は保存していません。";
   if (!editingId) fill(preview.shop);
   else {
     const current = fields();
@@ -156,6 +165,7 @@ async function resolvePreview(networkIndex) {
 }
 
 $("#add-shop").addEventListener("click", () => showEditor());
+$("#shop-form").elements.namedItem("reservationEnabled").addEventListener("change", reservationFields);
 $("#close-editor").addEventListener("click", () => { $("#editor").hidden = true; });
 $("#resolve-form").addEventListener("submit", event => { event.preventDefault(); run(() => resolvePreview()); });
 $("#choice-form").addEventListener("submit", event => { event.preventDefault(); run(() => resolvePreview(Number($("#network-choice").value))); });
@@ -172,4 +182,5 @@ $("#shop-form").addEventListener("submit", event => {
     $("#editor").hidden = true;
   });
 });
+try { sessionStorage.removeItem("gemihub-admin-ai-v1"); } catch { /* Remove obsolete admin-only credentials. */ }
 run(async () => { state = await api("/api/shops"); render(); });

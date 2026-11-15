@@ -1,4 +1,5 @@
 import { allergenLabel, COURSE_LABELS, normalizeShopFilter } from "./finder.js";
+import { hasAgent } from "./shop-data.js";
 
 const BATCH_SIZE = 4;
 const ASK_PREFERENCES_AT = 15;
@@ -25,11 +26,13 @@ export class ShopInquiries {
     this.preferences = { cuisine: null, area: null };
   }
 
-  async confirm({ cuisine, area, expectedVersion, offset = 0 } = {}) {
+  async confirm({ cuisine, area, expectedVersion, offset = 0, purpose = "reservation", query = "" } = {}) {
     if (this.pending) return { ok: false, reason: "確認先の確認に回答してください。" };
     const page = this.getPage();
     const state = page.getState();
-    if (expectedVersion !== state.version || !state.valid) return { ok: false, reason: "最新の日時・人数を確認してください。" };
+    if (!["reservation", "introduction"].includes(purpose)) return { ok: false, reason: "問い合わせの目的を確認してください。" };
+    if (expectedVersion !== state.version || (purpose === "reservation" && !state.valid)) return { ok: false, reason: "最新の条件を確認してください。予約の問い合わせには日時・人数が必要です。" };
+    if (typeof query !== "string" || query.length > 140 || (purpose === "introduction" && !query.trim())) return { ok: false, reason: "問い合わせる内容を140文字以内で指定してください。" };
     if (![cuisine, area].every(value => typeof value === "string" && value.length <= 80)) {
       return { ok: false, reason: "ジャンル・場所は文字列で渡してください。指定なしの場合は空文字を使ってください。" };
     }
@@ -42,21 +45,21 @@ export class ShopInquiries {
     const unrestricted = field => any || new RegExp(`${field === "cuisine" ? "(?:ジャンル|料理|食事)" : "(?:場所|地域|エリア)"}.{0,12}(?:指定なし|おまかせ|何でも|なんでも|どこでも|問わない|こだわり.{0,3}(?:ない|なし|ありません))`).test(text);
     const resolve = (field, value) => value.trim() ? normalizeShopFilter(value) : (unrestricted(field) ? "" : this.preferences[field]);
     const preferences = { cuisine: resolve("cuisine", cuisine), area: resolve("area", area) };
-    const matches = page.listShops({ cuisine: preferences.cuisine ?? "", area: preferences.area ?? "" });
+    const matches = page.listShops({ cuisine: preferences.cuisine ?? "", area: preferences.area ?? "", purpose }).filter(hasAgent);
     this.preferences = preferences;
     if (matches.length >= ASK_PREFERENCES_AT && Object.values(preferences).some(value => value === null)) {
       return { ok: false, count: matches.length, needsPreferences: true,
         missingPreferences: Object.keys(preferences).filter(field => preferences[field] === null),
         reason: "候補が15店以上あります。未指定のジャンル・場所だけをチャットで聞いてください。指定なしでも進められます。" };
     }
-    if (!matches.length) return { ok: false, count: 0, reason: "そのジャンル・場所に合う登録店はありません。希望を変えるか確認してください。" };
-    if (offset && (!previous || previous.nextOffset !== offset || previous.cuisine !== preferences.cuisine || previous.area !== preferences.area)) {
+    if (!matches.length) return { ok: false, count: 0, reason: "その条件で問い合わせられるエージェントはありません。登録済みの紹介文や店舗サイトから案内できます。" };
+    if (offset && (!previous || previous.nextOffset !== offset || previous.cuisine !== preferences.cuisine || previous.area !== preferences.area || previous.purpose !== purpose || previous.query !== query)) {
       return { ok: false, reason: "条件が変わったか、続きがありません。offset=0で件数を確認し直してください。" };
     }
     if (!offset) page.clearCandidates();
     const shops = matches.slice(offset, offset + BATCH_SIZE);
     const nextOffset = offset + shops.length < matches.length ? offset + shops.length : null;
-    const plan = { ...preferences, expectedVersion, conditions: state.conditions, shops, count: shops.length,
+    const plan = { ...preferences, purpose, query, expectedVersion, conditions: state.conditions, shops, count: shops.length,
       totalCount: matches.length, offset, nextOffset, hasMore: nextOffset !== null };
     const controller = new AbortController();
     this.pending = controller;
@@ -65,7 +68,7 @@ export class ShopInquiries {
       if (controller.signal.aborted || this.getPage().version !== expectedVersion) {
         return { ok: false, reason: "条件が変わりました。確認先を確認し直してください。" };
       }
-      if (accepted !== true) return { ok: true, approved: false, count: plan.count, reason: "空席・メニューの確認は行っていません。希望を確認してください。" };
+      if (accepted !== true) return { ok: true, approved: false, count: plan.count, reason: "店への問い合わせは行っていません。希望を確認してください。" };
       this.approved = plan;
       return { ok: true, approved: true, ...this.batchState(), shops, version: expectedVersion };
     } finally {
@@ -81,7 +84,7 @@ export class ShopInquiries {
     const plan = this.activePlan();
     if (!plan) return null;
     const { count, totalCount, offset, nextOffset, hasMore } = plan;
-    return { count, totalCount, offset, nextOffset, hasMore };
+    return { count, totalCount, offset, nextOffset, hasMore, purpose: plan.purpose, query: plan.query };
   }
 
   canContactNetwork(url) {
@@ -112,7 +115,25 @@ export function installInquiryPolicy(engine, inquiries) {
   const resolveMcp = engine.resolveMcp.bind(engine);
   engine.resolveMcp = (ref, ...args) => {
     if (!inquiries.canContactMcp(ref)) throw new Error("確認した確認先に含まれない接続先です。");
-    return resolveMcp(ref, ...args);
+    const plan = inquiries.activePlan();
+    if (plan?.purpose !== "introduction") return resolveMcp(ref, ...args);
+    return Promise.resolve(resolveMcp(ref, ...args)).then(client => {
+      const allowed = new Set();
+      const check = () => { if (inquiries.activePlan() !== plan) throw new Error("問い合わせ先をもう一度確認してください。"); };
+      return {
+        listTools: async (...params) => {
+          check();
+          const tools = (await client.listTools(...params)).filter(tool => tool.annotations?.readOnlyHint === true || ["get_shop_info", "check_availability", "find_menu_items"].includes(tool.name));
+          for (const tool of tools) allowed.add(tool.name);
+          return tools;
+        },
+        callTool: (name, ...params) => {
+          check();
+          if (!allowed.has(name)) throw new Error("店舗紹介では読み取り専用の問い合わせだけを利用できます。");
+          return client.callTool(name, ...params);
+        },
+      };
+    });
   };
 }
 
@@ -125,12 +146,13 @@ export function reviewShopInquiries(plan, signal) {
     card.setAttribute("aria-label", "確認先の確認");
     const title = document.createElement("p");
     title.className = "finder-inquiry-title";
+    const topic = plan.purpose === "introduction" ? "商品・店舗情報" : "空席・メニュー";
     title.textContent = plan.totalCount > plan.count
-      ? `候補は${plan.totalCount}店です。${plan.offset ? "続きの" : "まず"}${plan.count}店のAIで空席・メニューを確認しますか？`
-      : `${plan.count}店のAIで空席・メニューを確認しますか？`;
+      ? `候補は${plan.totalCount}店です。${plan.offset ? "続きの" : "まず"}${plan.count}店のAIで${topic}を確認しますか？`
+      : `${plan.count}店のAIで${topic}を確認しますか？`;
     const summary = document.createElement("p");
     const c = plan.conditions;
-    summary.textContent = `${plan.cuisine || "ジャンル指定なし"} / ${plan.area || "場所指定なし"} · ${c.date} ${c.time} / ${c.partySize}名 / ${COURSE_LABELS[c.course]}`
+    summary.textContent = plan.purpose === "introduction" ? `${plan.cuisine || "ジャンル指定なし"} / ${plan.area || "場所指定なし"} · ${plan.query}` : `${plan.cuisine || "ジャンル指定なし"} / ${plan.area || "場所指定なし"} · ${c.date} ${c.time} / ${c.partySize}名 / ${COURSE_LABELS[c.course]}`
       + (c.budgetPerPerson ? ` / 1人${c.budgetPerPerson.toLocaleString("ja-JP")}円` : "")
       + (c.avoid.length ? ` / 避けたい食材：${c.avoid.map(allergenLabel).join("、")}` : "");
     const targets = document.createElement("p");
@@ -147,7 +169,7 @@ export function reviewShopInquiries(plan, signal) {
       signal.removeEventListener("abort", abort);
       buttons.remove();
       title.textContent = signal.aborted ? "条件が変わりました。確認先を確認し直してください。"
-        : accepted ? `${plan.count}店への空席・メニューの確認を始めます。` : "空席・メニューの確認は行っていません。希望を変更してください。";
+        : accepted ? `${plan.count}店への${topic}の確認を始めます。` : `${topic}の確認は行っていません。希望を変更してください。`;
       document.getElementById("ns-input")?.focus();
       resolve(accepted);
     };

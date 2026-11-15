@@ -29,7 +29,9 @@ td.actions { min-width: 190px; }
 .badge.connected { background: #e4f2e6; color: #255c35; }
 .badge.error { background: #fce9e5; color: #9d2929; }
 label { display: flex; flex-direction: column; font-weight: 600; gap: 5px; }
-input, select { min-width: 0; width: 100%; border: 1px solid #aabbb0; border-radius: 6px; font: inherit; color: inherit; background: white; padding: 10px 12px; }
+input, select, textarea { min-width: 0; width: 100%; border: 1px solid #aabbb0; border-radius: 6px; font: inherit; color: inherit; background: white; padding: 10px 12px; }
+.check-field { flex-direction: row; align-items: center; gap: 10px; }
+.check-field input { width: 18px; height: 18px; }
 input[readonly] { background: #f2f4f0; color: #657068; }
 .url-row { display: flex; gap: 10px; margin: 8px 0; }
 .fields { display: grid; grid-template-columns: 1fr 1fr; gap: 18px; margin: 24px 0; }

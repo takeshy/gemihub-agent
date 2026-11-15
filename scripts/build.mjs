@@ -9,6 +9,7 @@ import { validateShops } from "./shops.mjs";
 export async function buildSite({ root = new URL("../", import.meta.url), check = false, production = false, stdio = "inherit" } = {}) {
   const json = async path => JSON.parse(await readFile(new URL(path, root), "utf8"));
   const shops = validateShops(await json("site/shops.json"), { production });
+  const partners = shops.filter(shop => shop.networkUrl);
   const upstream = await json("vendor/upstream.json");
   async function hashRuntime(dir, prefix = "", actual = {}) {
     for (const entry of await readdir(dir, { withFileTypes: true })) {
@@ -24,13 +25,14 @@ export async function buildSite({ root = new URL("../", import.meta.url), check 
   }
 
   const network = parseHocon(await readFile(new URL("src/reservation_finder.hocon", root), "utf8"));
-  network.link_labels = Object.fromEntries(shops.map(shop => [shop.networkUrl, shop.name]));
-  network.tools[0].tools = ["condition_checker", ...shops.map(shop => shop.networkUrl)];
-  network.tools[0].instructions = network.tools[0].instructions.replace("{partner_rules}", shops.map(shop => `- ${shop.name}: ${shop.networkTool} で空席・メニューを確認。`).join("\n") + "\n{partner_rules}");
+  network.link_labels = Object.fromEntries(partners.map(shop => [shop.networkUrl, shop.name]));
+  network.tools[0].tools = ["condition_checker", ...partners.map(shop => shop.networkUrl)];
+  network.tools[0].instructions = network.tools[0].instructions.replace("{partner_rules}", partners.map(shop => `- ${shop.name}: ${shop.networkTool} で公開情報を確認。予約対応の有無は登録情報を読む。`).join("\n") + "\n{partner_rules}");
   const manifest = await json("src/agent-manifest.json");
-  manifest.allowed_peers = [...new Set(shops.map(shop => new URL(shop.networkUrl).origin))];
+  manifest.allowed_peers = [...new Set(partners.map(shop => new URL(shop.networkUrl).origin))];
   const serialize = value => JSON.stringify(value, null, 2) + "\n";
-  const csp = `default-src 'self'; script-src 'self'; style-src 'self' 'unsafe-inline'; connect-src 'self' https: http://localhost:* http://127.0.0.1:* http://[::1]:*; frame-src 'self' ${manifest.allowed_peers.join(" ")}; worker-src 'self' blob:; img-src 'self' data:; object-src 'none'; base-uri 'none'; form-action 'self'`;
+  const pageOrigins = [...new Set(shops.map(shop => new URL(shop.pageUrl).origin))];
+  const csp = `default-src 'self'; script-src 'self'; style-src 'self' 'unsafe-inline'; connect-src 'self' https: http://localhost:* http://127.0.0.1:* http://[::1]:*; frame-src 'self' ${pageOrigins.join(" ")}; worker-src 'self' blob:; img-src 'self' data:; object-src 'none'; base-uri 'none'; form-action 'self'`;
   const publicPaths = ["agent-manifest.json", "reservation_finder.network.json", "links.json", "agent-mcp.json", ".well-known/nsdeploy.json", ".well-known/nsdeploy-agent.json"];
   const headers = publicPaths.map(path => `/${path}\n  Access-Control-Allow-Origin: *\n`).join("\n") + `\n/*\n  Referrer-Policy: no-referrer\n  X-Content-Type-Options: nosniff\n\n/\n  Content-Security-Policy: ${csp}\n\n/index.html\n  Content-Security-Policy: ${csp}\n\n/runtime/sandbox-worker.js\n  Content-Security-Policy: default-src 'none'; script-src blob:; connect-src 'none'; worker-src 'none'\n`;
   const outputs = {

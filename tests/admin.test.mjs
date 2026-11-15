@@ -94,10 +94,10 @@ test("successful refresh clears an earlier error and production saves build HTTP
   assert.deepEqual(JSON.parse(await readFile(join(root, "site/agent-manifest.json"))).allowed_peers, ["https://shops.example"]);
 });
 
-async function apiFixture(t) {
+async function apiFixture(t, options = {}) {
   const { root, store } = await fixture(t);
   const calls = [];
-  const server = createAdminServer({ root, store, resolver: async (url, opts) => { calls.push({ url, opts }); if (url === "fail") throw new Error("解決失敗"); return { shop: { id: "preview" }, cache: {} }; } });
+  const server = createAdminServer({ root, store, resolver: async (url, opts) => { calls.push({ url, opts }); if (url === "fail") throw new Error("解決失敗"); return { shop: { id: "preview" }, cache: {} }; }, ...options });
   await new Promise((accept, reject) => { server.once("error", reject); server.listen(0, "127.0.0.1", accept); });
   t.after(() => new Promise(resolve => server.close(resolve)));
   const port = server.address().port;
@@ -158,4 +158,44 @@ test("failed refresh records error state for existing shops", async t => {
   const { call } = await apiFixture(t);
   assert.equal((await call("/api/resolve", { method: "POST", data: { url: "fail", id: "akari" } })).status, 400);
   assert.equal((await call("/api/shops")).json.cache.akari.status, "error");
+});
+
+test("Gemini uses only the server key; no AI settings or genre autosave are exposed", async t => {
+  const received = [];
+  const { call, root } = await apiFixture(t, {
+    geminiApiKey: "server-secret",
+    resolver: async (_url, { suggestCuisine }) => ({ shop: { cuisine: await suggestCuisine({ name: "炉端 灯", description: "炉端焼き" }) } }),
+    cuisineSuggester: async (details, config) => { received.push({ details, config }); return "和食・炉端焼き"; },
+  });
+  const before = await snapshot(root);
+  assert.equal((await call("/api/ai-config")).status, 404);
+  assert.equal((await call("/api/models", { method: "POST", data: {} })).status, 404);
+  const html = (await call("/")).body;
+  assert.doesNotMatch(html, /ai-settings|ai-form|ai-model|ai-key/);
+  assert.equal((await call("/api/resolve", { method: "POST", data: { url: "test" } })).json.shop.cuisine, "和食・炉端焼き");
+  assert.equal(received[0].config.apiKey, "server-secret");
+  await call("/api/resolve", { method: "POST", data: { url: "test", ai: { baseUrl: "https://other.example/v1", model: "other", apiKey: "own-key" } } });
+  assert.deepEqual(received[1].config, { apiKey: "server-secret" });
+  await call("/api/resolve", { method: "POST", data: { url: "test", ai: { baseUrl: "https://other.example/v1" } } });
+  assert.deepEqual(received[2].config, { apiKey: "server-secret" });
+  assert.deepEqual(await snapshot(root), before);
+  assert.equal((await call("/runtime/byok.js")).status, 404);
+  assert.equal((await call("/runtime/model.js")).status, 404);
+});
+
+test("ordinary shop descriptions and independent capabilities survive a real save/build", async t => {
+  const { store, root } = await fixture(t);
+  const current = await store.get();
+  const shop = { id: "zakka", name: "雑貨の森", area: "東京都新宿区", cuisine: "雑貨・生活雑貨", pageUrl: "https://zakka.example/", networkUrl: "", description: "器と文具のお店。", reservationEnabled: false };
+  const saved = await store.save([...current.shops, shop]);
+  assert.deepEqual(saved.shops.at(-1), shop);
+  const manifest = JSON.parse(await readFile(join(root, "site/agent-manifest.json")));
+  assert.ok(!manifest.allowed_peers.includes("https://zakka.example"));
+  assert.match(await readFile(join(root, "site/_headers"), "utf8"), /frame-src[^\n]*https:\/\/zakka.example/);
+  assert.match(await readFile(join(root, "site/shop-registry.js"), "utf8"), /器と文具のお店/);
+  const network = JSON.parse(await readFile(join(root, "site/reservation_finder.network.json")));
+  assert.ok(!network.tools[0].tools.some(tool => typeof tool === "string" && tool.includes("zakka.example")));
+  await store.save([shop]);
+  assert.deepEqual(JSON.parse(await readFile(join(root, "site/agent-manifest.json"))).allowed_peers, []);
+  assert.deepEqual(JSON.parse(await readFile(join(root, "site/reservation_finder.network.json"))).tools[0].tools, ["condition_checker"]);
 });

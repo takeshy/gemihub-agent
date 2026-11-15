@@ -3,7 +3,7 @@ import { randomUUID, createHash } from "node:crypto";
 import { tmpdir } from "node:os";
 import { join, resolve, sep } from "node:path";
 import { pathToFileURL } from "node:url";
-import { validateShops } from "../scripts/shops.mjs";
+import { SHOP_FIELDS, validateShops } from "../scripts/shops.mjs";
 import { buildSite } from "../scripts/build.mjs";
 
 export const generatedFiles = [
@@ -12,7 +12,6 @@ export const generatedFiles = [
   "site/.well-known/nsdeploy.json", "site/.well-known/nsdeploy-agent.json",
   "site/bridge/action-bridge.html", "site/bridge/agent-manifest.json",
 ];
-const fields = ["id", "name", "area", "cuisine", "pageUrl", "networkUrl"];
 const serialize = value => JSON.stringify(value, null, 2) + "\n";
 const revision = bytes => createHash("sha256").update(bytes).digest("hex");
 
@@ -61,7 +60,7 @@ export function createShopStore({ root, production = false, build = buildSite, w
       throw error;
     }
     const validated = validateShops({ version: 1, shops }, { production });
-    const config = { version: 1, shops: validated.map(shop => Object.fromEntries(fields.map(key => [key, shop[key]]))) };
+    const config = { version: 1, shops: validated.map(shop => Object.fromEntries(SHOP_FIELDS.filter(key => Object.hasOwn(shop, key)).map(key => [key, shop[key]]))) };
     const cache = { version: 1, shops: Object.fromEntries(config.shops.map(shop => [shop.id, cleanMetadata({ ...current.cache[shop.id], ...(Object.hasOwn(updates, shop.id) ? updates[shop.id] : {}) })])) };
     const stage = await mkdtemp(join(tmpdir(), "gemihub-admin-"));
     try {

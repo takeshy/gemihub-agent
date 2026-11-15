@@ -4,7 +4,7 @@ export const shops = [
     "id": "akari",
     "name": "炉端 灯",
     "area": "東京都新宿区",
-    "cuisine": "和食・炉端焼き",
+    "cuisine": "和食 炉端焼き",
     "pageUrl": "http://127.0.0.1:3000/s/akari/reserve",
     "networkUrl": "http://127.0.0.1:3000/s/akari/agent/reservation_concierge",
     "networkTool": "s_akari_agent_reservation_concierge"

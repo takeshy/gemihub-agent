@@ -5,8 +5,8 @@
   <meta name="viewport" content="width=device-width, initial-scale=1">
   <meta name="referrer" content="no-referrer">
   <meta name="color-scheme" content="light">
-  <meta name="description" content="席だけの予約から宴会まで。あなたのAIでお店に空席・メニューの確認、条件を比べて予約ページへ。">
-  <title>お店さがし予約エージェント</title>
+  <meta name="description" content="雑貨店やカフェ、飲食店まで。お店の特徴を比べて見つけ、店舗サイトや予約ページへご案内します。">
+  <title>お店さがし｜紹介と予約案内</title>
   <link rel="stylesheet" href="./assistant.css">
   <link rel="stylesheet" href="./style.css">
   <script type="module" src="./script.js"></script>
@@ -15,20 +15,20 @@
 <body>
   <a class="skip-link" href="#main">本文へ</a>
   <header class="site-header">
-    <a class="brand" href="./"><span class="brand-mark" aria-hidden="true">灯</span><span>お店さがし<span class="brand-sub">予約エージェント</span></span></a>
+    <a class="brand" href="./"><span class="brand-mark" aria-hidden="true">灯</span><span>お店さがし<span class="brand-sub">お店紹介・予約案内</span></span></a>
     <nav aria-label="ページ内"><a href="#registered-shops">登録店 <span id="shop-count">—</span></a><a href="#assistant">AIに相談</a></nav>
   </header>
   <header id="shop-view-header" class="shop-view-header" hidden><button id="shop-close" type="button">← お店探しに戻る</button><span id="shop-name"></span></header>
   <main id="main">
     <section class="hero" aria-labelledby="hero-title">
-      <p class="eyebrow">いつもの食事も、みんなの集まりも。</p>
+      <p class="eyebrow">暮らしのお買い物も、いつもの食事も。</p>
       <h1 id="hero-title">ぴったりのお店を、<br>話しながら見つけよう。</h1>
-      <p class="hero-description">日時と人数、あとは少しのこだわり。<br>お店のAIで空席やメニューを確認します。</p>
-      <ol class="steps"><li><span>01</span> 条件を伝える</li><li><span>02</span> お店の回答を比べる</li><li><span>03</span> お店を開いて相談</li><li><span>04</span> お店のページで予約</li></ol>
+      <p class="hero-description">探しているものや、お出かけ先のこと。<br>お店の特徴を見つけて、店舗サイトへご案内します。</p>
+      <ol class="steps"><li><span>01</span> 希望を伝える</li><li><span>02</span> お店を見つける</li><li><span>03</span> 特徴を比べる</li><li><span>04</span> お店のサイトへ</li></ol>
     </section>
     <section id="assistant" class="assistant panel" aria-labelledby="assistant-heading">
       <div class="section-heading"><span class="eyebrow">YOUR ASSISTANT</span><h2 id="assistant-heading">お店さがしを相談する</h2></div>
-      <p>行きたい料理のジャンルや場所、日時と人数をチャットで伝えてください。確認するお店の数をお伝えしてから、空席やメニューを調べます。</p>
+      <p>「新宿の雑貨店」「贈り物が見つかるお店」など、探しているものを話してください。予約を相談したいときは、日時と人数も伝えられます。</p>
       <p class="assistant-note">ご自身のAIを使って相談します。<button id="ai-settings-open" class="text-button" type="button" disabled>AIの設定</button></p>
       <p id="assistant-status" role="status">AIを準備しています。読み込めない場合も、登録店のリンクは使えます。</p>
       <div id="shop-error" class="shop-error" role="alert" hidden>
@@ -57,11 +57,11 @@
     </section>
     <section id="registered-shops" aria-labelledby="shops-heading">
       <div class="section-heading"><span class="eyebrow">OUR NEIGHBOURS</span><h2 id="shops-heading">登録されているお店</h2></div>
-      <p class="muted">公開ネットワークを、あなたのブラウザで実行します。空席・価格は確認時に確認します。</p>
+      <p class="muted">雑貨店などの店舗紹介と、予約に対応したお店を掲載しています。お店のAIへの問い合わせは、対象を確認してから行います。</p>
       <div id="shop-list" class="card-grid"></div>
     </section>
   </main>
-  <footer><p>メッセージと条件は、あなたが選んだLLMと、許可したお店のエージェント（あなたのブラウザ内で実行）に送られます。</p><p>お店のエージェントは、空席・メニューの確認を自店の読み取り専用MCPへ送る場合があります。空席は予約の確保を意味しません。</p></footer>
+  <footer><p>メッセージは選択したAIへ送られます。お店のエージェントへ問い合わせる場合は、対象と内容を確認します。</p><p>在庫・価格・空席は確認時点の情報です。予約や購入の手続きは店舗サイトで行います。</p></footer>
   <noscript>このサイトのAIにはJavaScriptが必要です。</noscript>
 </body>
 </html>

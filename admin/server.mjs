@@ -4,6 +4,7 @@ import { fileURLToPath } from "node:url";
 import { resolve } from "node:path";
 import { resolveShop } from "../scripts/resolve-shop.mjs";
 import { createShopStore } from "./store.mjs";
+import { suggestCuisine } from "../scripts/suggest-cuisine.mjs";
 
 async function body(req) {
   if (!/^application\/json(?:\s*;|$)/i.test(req.headers["content-type"] || "")) {
@@ -20,7 +21,7 @@ async function body(req) {
   catch { throw new Error("JSONを読み込めませんでした"); }
 }
 
-export function createAdminServer({ root = fileURLToPath(new URL("../", import.meta.url)), production = false, store = createShopStore({ root, production }), resolver = resolveShop } = {}) {
+export function createAdminServer({ root = fileURLToPath(new URL("../", import.meta.url)), production = false, store = createShopStore({ root, production }), resolver = resolveShop, geminiApiKey = process.env.GEMINI_API_KEY || "", cuisineSuggester = suggestCuisine } = {}) {
   return createServer(async (req, res) => {
     const send = (status, data) => {
       req.resume();
@@ -46,7 +47,8 @@ export function createAdminServer({ root = fileURLToPath(new URL("../", import.m
         const current = await store.get();
         if (input.id !== undefined && !current.shops.some(shop => shop.id === input.id)) throw new Error("編集する店が見つかりません");
         try {
-          return send(200, await resolver(input.url, { shops: current.shops, editingId: input.id, networkIndex: input.networkIndex, production }));
+          return send(200, await resolver(input.url, { shops: current.shops, editingId: input.id, networkIndex: input.networkIndex, discovery: true, production,
+            suggestCuisine: details => cuisineSuggester(details, { apiKey: geminiApiKey }) }));
         } catch (error) {
           if (input.id) await store.recordError(input.id, error.message);
           throw error;
@@ -58,7 +60,7 @@ export function createAdminServer({ root = fileURLToPath(new URL("../", import.m
       }
       const match = url.pathname.match(/^\/api\/shops\/([^/]+)$/);
       if (req.method === "DELETE" && match) return send(200, await store.delete(decodeURIComponent(match[1]), req.headers["if-match"]));
-      const assets = { "/": ["index.html", "text/html"], "/index.html": ["index.html", "text/html"], "/admin.js": ["admin.js", "text/javascript"], "/admin.css": ["admin.css", "text/css"] };
+      const assets = { "/": ["index.html", "text/html"], "/index.html": ["index.html", "text/html"], "/admin.js": ["admin.js", "text/javascript"], "/admin.css": ["admin.css", "text/css"], "/shop-data.js": ["../site/shop-data.js", "text/javascript"] };
       if (["GET", "HEAD"].includes(req.method) && Object.hasOwn(assets, url.pathname)) {
         const [file, type] = assets[url.pathname];
         const data = await readFile(new URL(file, import.meta.url));

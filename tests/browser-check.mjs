@@ -65,7 +65,7 @@ try {
     body: JSON.stringify({ data: [{ id: "openai/gpt-6-luna" }] }),
   }));
   await page.goto(base);
-  await page.waitForFunction(() => { const engine = window.__nsweb?.engine; return engine?.actions.catalog({ base: engine.top.base, network: engine.top.network.name }).length === 7; });
+  await page.waitForFunction(() => { const engine = window.__nsweb?.engine; return engine?.actions.catalog({ base: engine.top.base, network: engine.top.network.name }).length === 8; });
   assert.equal(shopRequests.length, 0);
   assert.equal(modelRequests.length, 0);
   assert.equal(await page.locator("#shop-list .shop-card").count(), 3);

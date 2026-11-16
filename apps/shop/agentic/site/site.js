@@ -4,6 +4,7 @@
 import { App } from "./reserve-page.js";
 import { openReviewDialog } from "./review-dialog.js";
 import { RelayClient } from "./llm-relay.js";
+import { aiConnection, mountAiConnection } from "./ai-connection.js";
 
 const WORDS = {
   ja: {
@@ -194,11 +195,13 @@ export class AssistantMount {
     try {
       // Load the runtime here, so a missing or broken runtime is reported too.
       const { boot } = await import("./runtime/index.js");
+      const connection = relayed ? null : await aiConnection();
       const booted = await boot("#agent-app", {
         originUrl: siteBase,
         sandboxWorkerUrl: new URL("runtime/sandbox-worker.js", siteBase).href,
         // The runtime's own options for a hosting page. The key is a session label, never a provider key.
         ...(relayed ? { router: relayed.router, byokKey: relayed.key, model: relayed.model } : {}),
+        ...(!relayed && connection?.setup || {}),
       });
       AssistantMount.engine = booted.engine;
       AssistantMount.mountChatControls();
@@ -212,6 +215,7 @@ export class AssistantMount {
       if (!relayed) {
         const { mountAISetup } = await import("./ai-setup.js");
         AssistantMount.setup = mountAISetup(booted.engine);
+        mountAiConnection(booted.engine, connection);
         if (!document.getElementById("assistant").hidden) AssistantMount.setup.openIfNeeded();
       }
       status.textContent = relayed ? words.relay.open : needsKey ? words.needsKey : words.connected;

@@ -1,5 +1,8 @@
+import { build } from "vite";
 import { spawn } from "node:child_process";
 import { fileURLToPath } from "node:url";
+
+await build({ configFile: fileURLToPath(new URL("../admin/editor/vite.config.mjs", import.meta.url)) });
 
 const root = fileURLToPath(new URL("../", import.meta.url));
 const shop = fileURLToPath(new URL("../apps/shop/", import.meta.url));
@@ -38,7 +41,7 @@ function start(name, args, cwd, env = {}) {
 }
 process.on("SIGINT", () => stop(130));
 process.on("SIGTERM", () => stop(143));
-start("finder", ["vendor/agentify-website/scripts/serve_site.mjs", "site", "--port", finderPort, "--open-as", "localhost"], root);
+start("finder", ["--env-file-if-exists=.env", "--import", "tsx", "scripts/serve.mjs", "--port", finderPort], root);
 start("admin", ["--env-file-if-exists=.env", "admin/server.mjs"], root, { ADMIN_PORT: adminPort, SHOP_ADMIN_ORIGIN: `http://127.0.0.1:${shopPort}` });
 start("shop", ["--env-file-if-exists=.env", "--import", "tsx", "server/index.ts"], shop, {
   DEMO_MODE: "true", SEED: "restaurant-demo", PORT: shopPort,

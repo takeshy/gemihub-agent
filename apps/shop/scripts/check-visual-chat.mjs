@@ -185,7 +185,7 @@ try{
   await page.getByRole('button',{name:label('修正する'),exact:true}).click();
   await send(language==='ja'?'お知らせカードの色をピンクにして':'Make news cards pink');await accept();
   const destinationMessage=label('共通の色・デザインを変更しました。本番に反映するには「ページ全体」を開いて「反映する」を押してください。');
-  await expect(chat.locator('.chat-message-assistant').last()).toHaveText('AI'+destinationMessage);
+  await expect(chat.locator('.chat-message-assistant').last().locator('.pre-wrap')).toHaveText(destinationMessage);
   await expect(page.locator('.editor-toolbar').getByRole('button',{name:label('反映する'),exact:true})).toHaveCount(0);
   await chat.getByRole('button',{name:label('閉じる'),exact:true}).click();
   await expect(page.locator('.local-preview > [role="status"]')).toContainText(destinationMessage);

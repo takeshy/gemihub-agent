@@ -41,6 +41,15 @@ resource "google_firestore_database" "app" {
   lifecycle { prevent_destroy = true }
 }
 
+resource "google_firestore_field" "public_ai_expiry" {
+  project    = var.project_id
+  database   = google_firestore_database.app.name
+  collection = "gemihub_public_ai"
+  field      = "expiresAt"
+  ttl_config {}
+  index_config {}
+}
+
 resource "google_project_iam_member" "database" {
   project = var.project_id
   role    = "roles/datastore.user"

@@ -10,7 +10,7 @@ import { RequestImagePicker } from "./RequestImagePicker";
 import { ImageUploadStatus } from "./ImageUploadStatus";
 
 const toData = (file: File) => new Promise<string>((resolve, reject) => { const reader = new FileReader(); reader.onload = () => resolve(String(reader.result).split(",")[1]); reader.onerror = () => reject(new Error(tr("画像を読み込めませんでした"))); reader.readAsDataURL(file); });
-export function ImageLibrary({ shopId, mode = "manage", onSelect, onCreated, onRemove, selectedIds = [], onImagesChange, onBusyChange, allowGeneration = true }: { shopId: string; mode?: "manage" | "select"; onSelect?: (image: LibraryImage) => void; onCreated?: (image: LibraryImage) => boolean; onRemove?: (id: string) => void; selectedIds?: string[]; onImagesChange?: (images: LibraryImage[] | undefined) => void; onBusyChange?: (busy: boolean) => void; allowGeneration?: boolean }) {
+export function ImageLibrary({ shopId, mode = "manage", onSelect, onCreated, onRemove, selectedIds = [], onImagesChange, onBusyChange, allowGeneration = true, uploadLimitMb = 5 }: { shopId: string; mode?: "manage" | "select"; onSelect?: (image: LibraryImage) => void; onCreated?: (image: LibraryImage) => boolean; onRemove?: (id: string) => void; selectedIds?: string[]; onImagesChange?: (images: LibraryImage[] | undefined) => void; onBusyChange?: (busy: boolean) => void; allowGeneration?: boolean; uploadLimitMb?: 5 | 10 }) {
   const api = useApi();
   const base = `/api/shops/${shopId}/images`;
   const pendingKey = `gemihub:image-generation:${shopId}`;
@@ -80,10 +80,10 @@ export function ImageLibrary({ shopId, mode = "manage", onSelect, onCreated, onR
     <div className="image-library-tools"><label>{tr("画像をアップロード")}<input type="file" accept="image/png,image/jpeg,image/gif,image/webp" disabled={busy || listening || !images} onChange={event => {
       const file = event.target.files?.[0]; event.target.value = ""; if (!file) return;
       setUpload(undefined);
-      if (file.size > 5 * 1024 * 1024 || !["image/png", "image/jpeg", "image/gif", "image/webp"].includes(file.type)) { setError(tr("5MB以内のPNG・JPEG・GIF・WebP画像を選んでください。")); return; }
+      if (file.size > uploadLimitMb * 1024 * 1024 || !["image/png", "image/jpeg", "image/gif", "image/webp"].includes(file.type)) { setError(uploadLimitMb === 10 ? tr("10MB以内のPNG・JPEG・GIF・WebP画像を選んでください。") : tr("5MB以内のPNG・JPEG・GIF・WebP画像を選んでください。")); return; }
       const action = { file, requestId: createRequestId() }; setUpload(action); void saveUpload(action);
     }} /></label>{allowGeneration && <button type="button" disabled={busy || listening} onClick={() => generatorOpen ? setGeneratorOpen(false) : startGeneration()}>{tr("AIで生成")}</button>}</div>
-    <p className="small muted">{tr("PNG・JPEG・GIF・WebP、1枚5MBまで。お客様メモの添付はこの一覧には表示しません。")}</p>
+    <p className="small muted">{uploadLimitMb === 10 ? tr("PNG・JPEG・GIF・WebP、1枚10MBまで。お客様メモの添付はこの一覧には表示しません。") : tr("PNG・JPEG・GIF・WebP、1枚5MBまで。お客様メモの添付はこの一覧には表示しません。")}</p>
     {upload && !busy && <button type="button" onClick={() => void saveUpload(upload)}>{tr("アップロードを再試行")}</button>}
     {uploading && <ImageUploadStatus name={upload?.file.name} />}
     {busy && !uploading && !generatorOpen && <p role="status">{tr("画像を保存しています…")}</p>}

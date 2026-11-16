@@ -63,6 +63,7 @@ import { Store, bookingLockKey, mailLockKey, postLockKey, isArchivedShop, type S
 import { resetShop } from "./shop-reset.ts";
 import { preserveDesignVersion, retireDesignVersions, pruneDesignVersions, nextDesignPublication, currentDesignPublication, restoreDesign, sameDesign, parseTargetKey, targetKey, versionsFor, targetLabel, indexedDesignVersions, hasCurrentDesignIndex, sameAsCurrent } from "./design-versions.ts";
 import { createInitialTheme, initialThemeConfig, initialIntroductionPages, initialThemePreview, type ThemeRun } from "./initial-theme.ts";
+import { publicAi, memoryAiState } from "./public-ai.ts";
 import { lateReleaseMinutes } from "../shared/seating.ts";
 import { aggregateCustomers, customerSummaries, phoneCustomerSchema, phoneKey, ensurePhoneCustomer, savePhoneCustomer, customerFilterSchema, customerSince, customerImages, customerAttachmentSchema, normalizeEmail, type CustomerNote, type CustomerAttachment, type Inquiry, type CustomerRecord } from "./customers.ts";
 import { attachmentUnavailable, googleCustomerFiles, memoryCustomerFiles, readAttachment, type CustomerFiles } from "./customer-files.ts";
@@ -308,6 +309,7 @@ export function createApp(
   shopObjects?: StorefrontFiles,
 ) {
   const logs = new ShopLogs(store);
+  const managedAi = publicAi({ ...(store.memory ? { state: memoryAiState() } : {}) });
   paymentGateway = loggedPaymentGateway(paymentGateway, logs);
   const reportError = (error: unknown) => { logs.error(error); console.error(error); };
   const integration = integrationAlerts({ store, appOrigin: () => origin(), log: (event, data) => console.error(JSON.stringify({ event, ...data })) });
@@ -1279,6 +1281,7 @@ export function createApp(
           : undefined;
       if (host !== appHost && !hosted) fail(404, tr("お店が見つかりません"));
       const publicHost = !!hosted;
+      if (await managedAi.handle(req, res, [publicHost ? `https://${host}` : origin(), ...(!publicHost && process.env.AGENT_PARENT_URL ? [new URL(process.env.AGENT_PARENT_URL).origin] : [])])) return;
       const ownerLogId = path.match(/^\/api\/shops\/([^/]+)(?:\/|$)/)?.[1];
       const publicLogSlug = path.match(/^\/(?:api\/public|s)\/([^/]+)(?:\/|$)/)?.[1];
       const logShop = hosted || allShops.find(shop => ownerLogId ? shop.id === ownerLogId : !!publicLogSlug && shop.slug === publicLogSlug && !!shop.published);

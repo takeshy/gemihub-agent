@@ -49,3 +49,6 @@ dd { margin: 0 0 10px; white-space: pre-wrap; }
 select { margin: 8px 0 12px; }
 [hidden] { display: none !important; }
 @media (max-width: 680px) { main { margin: 24px auto; padding: 0 12px; } .page-header { align-items: flex-start; flex-direction: column; } .panel { padding: 16px; } .fields { grid-template-columns: 1fr; } .url-row, .save-row { flex-direction: column; align-items: stretch; } .mobile-note { display: block; } h1 { font-size: 1.7rem; } }
+#invite-form { align-items:end; }
+#invite-form select { margin:0; }
+#invite-form > button { align-self:end; justify-self:start; }

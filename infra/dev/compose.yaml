@@ -1,0 +1,50 @@
+version: "2.4"
+x-app: &app
+  image: ${APP_IMAGE:?APP_IMAGE is required}
+  restart: unless-stopped
+  logging:
+    driver: json-file
+    options:
+      max-size: "10m"
+      max-file: "3"
+services:
+  app:
+    <<: *app
+    command: [node, infra/dev/start.mjs]
+    mem_limit: 1536m
+    stop_grace_period: 90s
+    env_file: [/etc/gemihub-dev/secrets.env]
+    environment:
+      NODE_OPTIONS: --max-old-space-size=64
+      PARENT_ROOT: /data/parent
+      ADMIN_HOST: 0.0.0.0
+      PARENT_ORIGIN: https://admin.dev.gemihub.net
+      SHOP_ADMIN_ORIGIN: https://shop.dev.gemihub.net
+      NODE_ENV: production
+      DEMO_MODE: 'false'
+      PORT: '3000'
+      APP_ORIGIN: https://shop.dev.gemihub.net
+      AGENT_PARENT_URL: https://dev.gemihub.net
+      GOOGLE_CLOUD_PROJECT: ${PROJECT_ID:?PROJECT_ID is required}
+      FIRESTORE_DATABASE_ID: gemihub-dev
+      STOREFRONT_BUCKET: ${PROJECT_ID}-gemihub-dev-files
+      GOOGLE_CLOUD_LOCATION: global
+      VERTEX_MODEL: ${VERTEX_MODEL:?VERTEX_MODEL is required}
+      GEMINI_MODEL: ${VERTEX_MODEL:?VERTEX_MODEL is required}
+      GEMINI_THINKING_LEVEL: low
+      PUBLIC_AI_MODE: managed
+      PUBLIC_AI_TRUST_PROXY: 'true'
+      PARENT_MAIL_URL: http://127.0.0.1:8091/api/internal/mail
+    volumes:
+      - /var/lib/gemihub-dev/parent:/data/parent
+  caddy:
+    image: caddy:2.11.9-alpine
+    restart: unless-stopped
+    mem_limit: 96m
+    ports: ['80:80', '443:443']
+    volumes:
+      - /opt/gemihub-dev/Caddyfile:/etc/caddy/Caddyfile:ro
+      - /var/lib/gemihub-dev/caddy:/data
+    logging:
+      driver: json-file
+      options: {max-size: "10m", max-file: "3"}

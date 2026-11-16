@@ -1,0 +1,6 @@
+# Update only the parent page editor on top of a verified application image.
+ARG BASE_IMAGE
+FROM ${BASE_IMAGE}
+WORKDIR /app
+COPY admin/editor/ admin/editor/
+RUN npm run build:admin

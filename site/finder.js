@@ -1,5 +1,5 @@
 // Page-owned business rules. Shared by manual controls and website_* actions.
-import { canReserve, reservationPageUrl, shopPageUrl } from "./shop-data.js";
+import { canCheckReservations, reservationPageUrl, shopPageUrl } from "./shop-data.js";
 export const COURSE_LABELS = { none: "席のみ", wanted: "コース希望", any: "どちらでも" };
 export const ALLERGENS = {
   shrimp: "えび", crab: "かに", walnut: "くるみ", wheat: "小麦",
@@ -84,7 +84,7 @@ export class FinderPage {
     const place = normalize(normalizeShopFilter(area));
     const genre = normalize(normalizeShopFilter(cuisine)).replace(/料理$/, "");
     const terms = query.trim().split(/\s+/).filter(Boolean).map(normalize);
-    return clone(this.shops.filter(shop => (purpose !== "reservation" || canReserve(shop)) && (!place || normalize(shop.area).includes(place))
+    return clone(this.shops.filter(shop => (purpose !== "reservation" || canCheckReservations(shop)) && (!place || normalize(shop.area).includes(place))
       && (!genre || normalize(shop.cuisine).includes(genre)) && terms.every(term => normalize(`${shop.name} ${shop.cuisine} ${shop.description || ""}`).includes(term))));
   }
 
@@ -125,7 +125,7 @@ export class FinderPage {
     for (const candidate of candidates) {
       if (!object(candidate) || Object.keys(candidate).some(key => !allowed.includes(key))) return refuse("比較結果の形式が正しくありません。");
       if (!this.shops.some(shop => shop.id === candidate.shopId) || ids.has(candidate.shopId)) return refuse("登録店のIDを重複なく指定してください。");
-      if (!canReserve(this.shops.find(shop => shop.id === candidate.shopId))) return refuse("予約非対応の店は、店舗紹介として案内してください。");
+      if (!canCheckReservations(this.shops.find(shop => shop.id === candidate.shopId))) return refuse("予約情報を取得できない店は、店舗紹介として案内してください。");
       ids.add(candidate.shopId);
       if (!["available", "full", "unknown", "declined"].includes(candidate.status)) return refuse("確認結果の状態が正しくありません。");
       if (!text(candidate.summary, 1000) || !candidate.summary.trim()) return refuse("根拠となる店の回答を要約してください。");
@@ -155,7 +155,7 @@ export class FinderPage {
     if (!validation.ok) return validation;
     const shop = this.shops.find(item => item.id === shopId);
     if (!shop) return refuse("登録されている店を選んでください。");
-    if (!canReserve(shop)) return refuse("この店の予約ページは登録されていません。店舗ページをご覧ください。");
+    if (!canCheckReservations(shop)) return refuse("この店の予約情報は取得できません。店舗サイトをご覧ください。");
     const candidate = this.candidates.find(item => item.shopId === shopId);
     if (courseId !== undefined && (!identifier(courseId) || candidate?.courseId !== courseId || candidate.status !== "available")) return refuse("確認できたコースを選んでください。");
     const c = validation.conditions;
@@ -177,9 +177,9 @@ export class FinderPage {
   framedShopUrl(shopId, target = "reserve", courseId) {
     const shop = this.shops.find(item => item.id === shopId);
     if (!shop) return refuse("登録されている店を選んでください。");
-    if (target === "reserve" && !canReserve(shop)) return refuse("この店の予約ページは登録されていません。店舗ページをご覧ください。");
+    if (target === "reserve" && !canCheckReservations(shop)) return refuse("この店の予約情報は取得できません。店舗サイトをご覧ください。");
     const page = new URL(target === "shop" ? shopPageUrl(shop) : reservationPageUrl(shop));
-    if (!canReserve(shop)) return { url: page.href, conditions: null };
+    if (!canCheckReservations(shop)) return { url: page.href, conditions: null };
     const validation = validateConditions(this.conditions, this.now());
     if (!validation.ok) return { url: page.href, conditions: null };
     const c = validation.conditions;

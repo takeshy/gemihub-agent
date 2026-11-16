@@ -6,6 +6,10 @@ import { resolveShop } from "../scripts/resolve-shop.mjs";
 import { createShopStore } from "./store.mjs";
 import { suggestCuisine } from "../scripts/suggest-cuisine.mjs";
 import { createGoogleAuth, trustedIntegration } from "./google-auth.mjs";
+import { createSiteEditor } from "./site-editor-store.mjs";
+import { createSiteDesignGenerator } from "./site-editor-ai.mjs";
+import { createSiteImages } from "./site-images.mjs";
+import { createSiteCapture } from "./site-capture.mjs";
 
 async function body(req, limit = 1024 * 1024) {
   if (!/^application\/json(?:\s*;|$)/i.test(req.headers["content-type"] || "")) {
@@ -22,7 +26,13 @@ async function body(req, limit = 1024 * 1024) {
   catch { throw new Error("JSONを読み込めませんでした"); }
 }
 
-export function createAdminServer({ root = fileURLToPath(new URL("../", import.meta.url)), production = false, store = createShopStore({ root, production }), resolver = resolveShop, geminiApiKey = process.env.GEMINI_API_KEY || "", cuisineSuggester = suggestCuisine, auth = createGoogleAuth({ root }), integrationSecret = process.env.PARENT_INTEGRATION_SECRET || "", shopOrigin = process.env.SHOP_ADMIN_ORIGIN || "http://127.0.0.1:3000", fetch: fetchImpl = globalThis.fetch } = {}) {
+export function createAdminServer({ root = process.env.PARENT_ROOT || fileURLToPath(new URL("../", import.meta.url)), production = false, store = createShopStore({ root, production }), resolver = resolveShop, geminiApiKey = process.env.GEMINI_API_KEY || "", cuisineSuggester = suggestCuisine, auth = createGoogleAuth({ root }), integrationSecret = process.env.PARENT_INTEGRATION_SECRET || "", shopOrigin = process.env.SHOP_ADMIN_ORIGIN || "http://127.0.0.1:3000", publicOrigin = process.env.PARENT_ORIGIN?.startsWith("https://") ? process.env.PARENT_ORIGIN : "", fetch: fetchImpl = globalThis.fetch, capture = createSiteCapture() } = {}) {
+  const external = publicOrigin ? new URL(publicOrigin) : null;
+  if (external && (external.protocol !== "https:" || external.origin !== publicOrigin)) throw new Error("公開管理画面のURLはHTTPSのオリジンを指定してください");
+  const siteEditor = createSiteEditor({ root, configured: !!geminiApiKey, generate: createSiteDesignGenerator({ apiKey: geminiApiKey, fetch: fetchImpl }) });
+  const siteImages = createSiteImages({ root });
+  const publicPage = new URL(process.env.AGENT_PARENT_URL || "http://localhost:8090");
+  if (publicPage.username || publicPage.password || (publicPage.protocol !== "https:" && !(publicPage.protocol === "http:" && ["localhost", "127.0.0.1", "[::1]"].includes(publicPage.hostname)))) throw new Error("お店さがしの公開URLを確認してください");
   return createServer(async (req, res) => {
     const send = (status, data) => {
       req.resume();
@@ -32,20 +42,21 @@ export function createAdminServer({ root = fileURLToPath(new URL("../", import.m
     res.setHeader("Cache-Control", "no-store");
     res.setHeader("X-Content-Type-Options", "nosniff");
     res.setHeader("Referrer-Policy", "no-referrer");
-    res.setHeader("Content-Security-Policy", "default-src 'none'; script-src 'self'; style-src 'self'; connect-src 'self'; base-uri 'none'; form-action 'self'; frame-ancestors 'none'");
+    res.setHeader("Content-Security-Policy", "default-src 'none'; script-src 'self'; style-src 'self' 'unsafe-inline'; img-src 'self' data: blob:; connect-src 'self'; frame-src 'self'; base-uri 'none'; form-action 'self'; frame-ancestors 'none'");
     try {
-      const port = req.socket.localPort;
-      const hosts = [`127.0.0.1:${port}`, `localhost:${port}`, ...(port === 80 ? ["127.0.0.1", "localhost"] : [])];
-      if (!hosts.includes(req.headers.host)) return send(403, { error: "ローカルの管理画面からアクセスしてください" });
-      const origin = `http://${req.headers.host}`;
-      const url = new URL(req.url, origin);
-      if (url.origin !== origin) return send(403, { error: "接続先が不正です" });
-      if (req.method === "POST" && url.pathname === "/api/internal/mail") {
+      // Private server-to-server mail uses its shared secret independently of browser hosts/origins.
+      if (req.method === "POST" && req.url === "/api/internal/mail") {
         if (!trustedIntegration(req, integrationSecret) || !auth) return send(403, { error: "メールの依頼元を確認できません" });
         const message = await body(req, 15 * 1024 * 1024);
         await auth.mail(message, message.senderEmail);
         return send(200, { ok: true });
       }
+      const port = req.socket.localPort;
+      const hosts = [`127.0.0.1:${port}`, `localhost:${port}`, ...(port === 80 ? ["127.0.0.1", "localhost"] : [])];
+      if (external ? req.headers.host !== external.host : !hosts.includes(req.headers.host)) return send(403, { error: "管理画面のURLからアクセスしてください" });
+      const origin = external?.origin || `http://${req.headers.host}`;
+      const url = new URL(req.url, origin);
+      if (url.origin !== origin) return send(403, { error: "接続先が不正です" });
       if (!["GET", "HEAD"].includes(req.method) && req.headers.origin !== origin) return send(403, { error: "管理画面と同じOriginから操作してください" });
       const oauthReturn = req.method === "GET" && url.pathname === "/auth/google/callback";
       const pageNavigation = req.method === "GET" && url.pathname === "/" && req.headers["sec-fetch-mode"] === "navigate" && req.headers["sec-fetch-dest"] === "document";
@@ -56,6 +67,30 @@ export function createAdminServer({ root = fileURLToPath(new URL("../", import.m
       if (req.method === "GET" && url.pathname === "/api/session") return send(200, auth ? auth.status(user) : { user, configured: true });
       if (req.method === "POST" && url.pathname === "/api/logout") { if (auth) await auth.logout(req, res, origin); return send(200, { ok: true }); }
       if (url.pathname.startsWith("/api/") && !user) return send(401, { error: "運営者としてGoogleにログインしてください" });
+      if (req.method === "GET" && url.pathname === "/api/site/images") return send(200, await siteImages.list());
+      const imageMatch = url.pathname.match(/^\/api\/site\/images\/([a-f0-9]{64})$/);
+      if (req.method === "GET" && imageMatch) return send(200, await siteImages.read(imageMatch[1]));
+      if (req.method === "POST" && url.pathname === "/api/site/images") return send(200, await siteImages.upload(await body(req, 14 * 1024 * 1024)));
+      if (req.method === "POST" && url.pathname === "/api/site/capture") {
+        const input = await body(req);
+        if (!input || typeof input !== "object" || Array.isArray(input) || Object.keys(input).some(k => !["sourceId", "revision", "width"].includes(k)) || typeof input.revision !== "string" || ![390,1280].includes(input.width)) return send(400, { error: "画面の取り込み設定を確認してください。" });
+        const html = await siteEditor.preview(input.sourceId || "published", (await store.get()).shops, input.revision);
+        return send(200, await capture({ html, width: input.width }));
+      }
+      if (req.method === "GET" && url.pathname === "/api/site") return send(200, { ...await siteEditor.get(), publicUrl: publicPage.href });
+      if (req.method === "GET" && url.pathname === "/api/site/preview") {
+        const html = await siteEditor.preview(url.searchParams.get("source") || "published", (await store.get()).shops);
+        res.setHeader("Content-Security-Policy", "sandbox; default-src 'none'; style-src 'unsafe-inline'; img-src https: data:; base-uri 'none'; form-action 'none'; frame-ancestors 'self'");
+        res.writeHead(200, { "Content-Type": "text/html; charset=utf-8" }); return res.end(html);
+      }
+      if (req.method === "POST" && ["/api/site/proposals", "/api/site/publish"].includes(url.pathname)) {
+        const input = await body(req, 8 * 1024 * 1024);
+        const allowed = url.pathname.endsWith("proposals") ? ["request", "revision", "sourceId", "media", "imageIds"] : ["revision", "sourceId"];
+        if (!input || typeof input !== "object" || Array.isArray(input) || Object.keys(input).some(k => !allowed.includes(k))) return send(400, { error: "変更内容の形式を確認してください" });
+        if (url.pathname.endsWith("publish")) return send(200, { ...await siteEditor.publish(input, user), publicUrl: publicPage.href });
+        const controller = new AbortController(); res.once("close", () => { if (!res.writableFinished) controller.abort(); });
+        return send(200, { ...await siteEditor.propose(input, user, (await store.get()).shops, controller.signal), publicUrl: publicPage.href });
+      }
       if (req.method === "POST" && url.pathname === "/api/invitations") {
         if (integrationSecret.length < 32) return send(503, { error: "店舗への招待設定が必要です" });
         const target = new URL(shopOrigin);
@@ -85,7 +120,7 @@ export function createAdminServer({ root = fileURLToPath(new URL("../", import.m
       }
       const match = url.pathname.match(/^\/api\/shops\/([^/]+)$/);
       if (req.method === "DELETE" && match) return send(200, await store.delete(decodeURIComponent(match[1]), req.headers["if-match"]));
-      const assets = { "/": ["index.html", "text/html"], "/index.html": ["index.html", "text/html"], "/admin.js": ["admin.js", "text/javascript"], "/admin.css": ["admin.css", "text/css"], "/shop-data.js": ["../site/shop-data.js", "text/javascript"] };
+      const assets = { "/page-editor": ["dist/index.html", "text/html"], "/editor.js": ["dist/editor.js", "text/javascript"], "/editor.css": ["dist/editor.css", "text/css"], "/": ["index.html", "text/html"], "/index.html": ["index.html", "text/html"], "/admin.js": ["admin.js", "text/javascript"], "/site-editor.js": ["site-editor.js", "text/javascript"], "/admin.css": ["admin.css", "text/css"], "/shop-data.js": ["../site/shop-data.js", "text/javascript"] };
       if (["GET", "HEAD"].includes(req.method) && Object.hasOwn(assets, url.pathname)) {
         const [file, type] = assets[url.pathname];
         const data = await readFile(new URL(file, import.meta.url));
@@ -104,5 +139,5 @@ if (process.argv[1] && resolve(process.argv[1]) === fileURLToPath(import.meta.ur
   if (!Number.isInteger(port) || port < 1 || port > 65535) throw new Error("ADMIN_PORTは1〜65535で指定してください");
   const server = createAdminServer({ production: args.includes("--production") });
   server.on("error", error => { console.error(error.message); process.exitCode = 1; });
-  server.listen(port, "127.0.0.1", () => console.log(`店舗管理: http://127.0.0.1:${port}/${args.includes("--production") ? " (production)" : ""}`));
+  server.listen(port, process.env.ADMIN_HOST || "127.0.0.1", () => console.log(`店舗管理: ${process.env.PARENT_ORIGIN || `http://127.0.0.1:${port}`}/${args.includes("--production") ? " (production)" : ""}`));
 }

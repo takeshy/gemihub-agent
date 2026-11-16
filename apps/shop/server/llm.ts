@@ -1,6 +1,6 @@
 import { tr } from "../shared/i18n.ts";
 import { AsyncLocalStorage } from "node:async_hooks";
-import { GoogleGenAI, Modality, type Content, type GenerateContentResponse, type Part } from "@google/genai";
+import { GoogleGenAI, Modality, ThinkingLevel, type Content, type GenerateContentResponse, type Part } from "@google/genai";
 import OpenAI, { toFile } from "openai";
 import { observedAiCall } from "./ai-diagnostics.ts";
 
@@ -88,16 +88,19 @@ export function openAiStatus() {
   return { key: !!process.env.OPENAI_API_KEY, model: process.env.OPENAI_MODEL || "", designModel: process.env.OPENAI_DESIGN_MODEL || "", imageModel: process.env.OPENAI_IMAGE_MODEL || "" };
 }
 export function vertexStatus() {
-  return { project: !!process.env.GOOGLE_CLOUD_PROJECT, model: process.env.VERTEX_MODEL || "", designModel: process.env.VERTEX_DESIGN_MODEL || "", imageModel: process.env.GEMINI_IMAGE_MODEL || "gemini-nano-banana-2.1" };
+  return { project: !!process.env.GOOGLE_CLOUD_PROJECT, apiKey: !!process.env.GEMINI_API_KEY && process.env.GOOGLE_AI_AUTH !== "vertex", model: googleTextModel(), designModel: process.env.GEMINI_DESIGN_MODEL || process.env.VERTEX_DESIGN_MODEL || "", imageModel: process.env.GEMINI_IMAGE_MODEL || "gemini-nano-banana-2.1" };
 }
 /** Whether a provider has the credentials and models every feature needs. */
 export function providerReady(provider: AiProvider) {
   if (provider === "openai") { const s = openAiStatus(); return s.key && !!s.model && !!s.imageModel; }
   const s = vertexStatus();
-  return s.project && !!s.model;
+  return (s.apiKey || s.project) && !!s.model;
 }
 
+function googleTextModel() { return process.env.GEMINI_MODEL || process.env.VERTEX_MODEL || (process.env.GEMINI_API_KEY ? "gemini-4-hydrogen" : ""); }
+function googleThinking() { return { thinkingLevel: ({ low: ThinkingLevel.LOW, medium: ThinkingLevel.MEDIUM, high: ThinkingLevel.HIGH } as Record<string, ThinkingLevel>)[process.env.GEMINI_THINKING_LEVEL || "low"] || ThinkingLevel.LOW }; }
 function vertexClient(location = process.env.GOOGLE_CLOUD_LOCATION || "global") {
+  if (process.env.GEMINI_API_KEY && process.env.GOOGLE_AI_AUTH !== "vertex") return new GoogleGenAI({ apiKey: process.env.GEMINI_API_KEY });
   return new GoogleGenAI({ vertexai: true, project: process.env.GOOGLE_CLOUD_PROJECT, location });
 }
 let openAiClient: OpenAI | undefined;
@@ -114,7 +117,7 @@ export function setOpenAiClient(client: OpenAI | undefined) { openAiClient = cli
 /** Fail early, with the caller's own message, when the selected provider is not configured. */
 export async function requireText(message: string) {
   const provider = await currentProvider();
-  if (provider === "vertex" && (!process.env.GOOGLE_CLOUD_PROJECT || !process.env.VERTEX_MODEL)) throw unavailable(message);
+  if (provider === "vertex" && !providerReady("vertex")) throw unavailable(message);
   if (provider === "openai" && (!process.env.OPENAI_API_KEY || !process.env.OPENAI_MODEL)) throw unavailable(message);
   return provider;
 }
@@ -156,6 +159,7 @@ export function toOpenAiInput(contents: Content[]): OpenAiInput[] {
 export type AiPurpose = "review" | "design";
 /** Each purpose may name its own model; an unset one uses the provider's normal text model. */
 function textModel(provider: AiProvider, purpose?: AiPurpose) {
+  if (provider === "vertex") return purpose && (process.env[`GEMINI_${purpose.toUpperCase()}_MODEL`] || process.env[`VERTEX_${purpose.toUpperCase()}_MODEL`]) || googleTextModel();
   const prefix = provider === "openai" ? "OPENAI" : "VERTEX";
   return purpose && process.env[`${prefix}_${purpose.toUpperCase()}_MODEL`] || process.env[`${prefix}_MODEL`]!;
 }
@@ -177,7 +181,7 @@ export async function generateJson(input: { system: string; contents: Content[];
     }
     const response = await withDeadline(input.timeoutMs, signal => vertexClient(input.location).models.generateContent({
       model: textModel("vertex", input.purpose), contents: input.contents,
-      config: { responseMimeType: "application/json", responseJsonSchema: input.schema, systemInstruction: input.system, ...(signal ? { abortSignal: signal } : {}) },
+      config: { responseMimeType: "application/json", responseJsonSchema: input.schema, systemInstruction: input.system, thinkingConfig: googleThinking(), ...(signal ? { abortSignal: signal } : {}) },
     }));
     return response.text || "{}";
   });
@@ -204,8 +208,8 @@ export async function generateWithTools(input: { system: string; contents: Conte
     return { functionCalls, text: response.output_text || "", candidates: [{ content: { role: "model", parts } }] } as ToolResponse;
   }
   return withDeadline(input.timeoutMs, signal => vertexClient().models.generateContent({
-    model: process.env.VERTEX_MODEL!, contents: input.contents,
-    config: { systemInstruction: input.system, tools: [{ functionDeclarations: input.tools }], ...(signal ? { abortSignal: signal } : {}) },
+    model: googleTextModel(), contents: input.contents,
+    config: { systemInstruction: input.system, tools: [{ functionDeclarations: input.tools }], thinkingConfig: googleThinking(), ...(signal ? { abortSignal: signal } : {}) },
   }));
 }
 
@@ -246,7 +250,7 @@ export async function testProvider(provider: AiProvider) {
     const response = await openai().responses.create({ model: process.env.OPENAI_MODEL!, input: toOpenAiInput(contents), text: { format: { type: "json_schema", name: "result", schema, strict: false } } });
     text = response.output_text || "";
   } else {
-    const response = await vertexClient().models.generateContent({ model: process.env.VERTEX_MODEL!, contents, config: { responseMimeType: "application/json", responseJsonSchema: schema } });
+    const response = await vertexClient().models.generateContent({ model: googleTextModel(), contents, config: { responseMimeType: "application/json", responseJsonSchema: schema, thinkingConfig: googleThinking() } });
     text = response.text || "";
   }
   return { ok: JSON.parse(text || "{}").ok === true, milliseconds: Date.now() - started };

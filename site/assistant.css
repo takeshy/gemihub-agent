@@ -93,3 +93,6 @@ body > dialog button { margin-right: 8px; }
   .assistant-review dl { grid-template-columns: 1fr; gap: 0; }
   .assistant-review dd { margin-bottom: 8px; }
 }
+
+/* The public finder does not expose the runtime's developer trace controls. */
+#agent-app .ns-devtoggle, #agent-app .ns-dev { display: none !important; }

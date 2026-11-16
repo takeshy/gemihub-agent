@@ -1,8 +1,9 @@
 import { canReserve, hasAgent, reservationPageUrl, shopPageUrl } from "/shop-data.js";
+import { mountSiteEditor } from "/site-editor.js";
 
 const $ = selector => document.querySelector(selector);
-const keys = ["id", "name", "area", "cuisine", "pageUrl", "networkUrl", "description", "reservationUrl"];
-const labels = { name: "店名", area: "エリア", cuisine: "ジャンル", pageUrl: "店舗ページURL", networkUrl: "ネットワークURL", description: "紹介文", reservationUrl: "予約ページURL" };
+const keys = ["id", "name", "area", "cuisine", "pageUrl", "networkUrl", "description", "address", "reservationUrl"];
+const labels = { address: "住所（地図用）", name: "店名", area: "エリア", cuisine: "ジャンル", pageUrl: "店舗ページURL", networkUrl: "ネットワークURL", description: "紹介文", reservationUrl: "予約ページURL" };
 const statuses = { connected: "接続OK", "needs-review": "要確認", error: "エラー" };
 let state = { shops: [], cache: {} };
 let editingId;
@@ -50,7 +51,7 @@ function action(text, handler, { unavailable = false, className = "secondary", t
 function render() {
   $("#shops").replaceChildren();
   $("#empty").hidden = state.shops.length > 0;
-  $("#mode").textContent = state.production ? "本番用モード · HTTPSの公開URLだけ登録できます。保存後、生成物をコミットして公開してください。" : "ローカル用モード · 保存後は公開サイトを再読み込みしてください。公開するフォルダは site/ だけです。";
+  $("#mode").textContent = state.production ? "公開用モード · HTTPSのURLだけ登録できます。保存後は公開サイトを再読み込みしてください。" : "ローカル用モード · 保存後は公開サイトを再読み込みしてください。公開するフォルダは site/ だけです。";
   state.shops.forEach((shop, index) => {
     const row = element("tr");
     for (const value of [shop.name, shop.area, shop.cuisine, new URL(shop.pageUrl).origin]) row.append(element("td", value));
@@ -199,5 +200,5 @@ run(async () => {
   $("#google-login").hidden = !!session.user || !session.configured;
   $("#logout").hidden = !session.user;
   $("#add-shop").hidden = $("#registry").hidden = $("#invitations").hidden = !session.user;
-  if (session.user) { state = await api("/api/shops"); render(); }
+  if (session.user) { state = await api("/api/shops"); render(); mountSiteEditor({ api }); }
 });

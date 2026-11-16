@@ -14,4 +14,13 @@
 **/.codex
 **/.agents
 **/.claude
+**/.terraform
+**/*.tfstate*
+**/*.tfplan
+**/*.tfvars
+**/backend.hcl
 **/*.log
+admin/site-editor.json
+admin/site-editor.json.*.tmp
+
+admin/site-images/

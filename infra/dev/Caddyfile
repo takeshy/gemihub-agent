@@ -1,0 +1,18 @@
+dev.gemihub.net {
+    handle /api/ai/* {
+        reverse_proxy app:3000 {
+            header_up Host shop.dev.gemihub.net
+        }
+    }
+    handle {
+        reverse_proxy app:8090
+    }
+}
+admin.dev.gemihub.net {
+    @internal path /api/internal/mail
+    respond @internal 404
+    reverse_proxy app:8091
+}
+shop.dev.gemihub.net {
+    reverse_proxy app:3000
+}

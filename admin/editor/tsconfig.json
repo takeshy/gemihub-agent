@@ -1,0 +1,1 @@
+{"extends":"../../apps/shop/tsconfig.json","include":["./*.tsx"]}

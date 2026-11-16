@@ -3,7 +3,7 @@ import assert from "node:assert/strict";
 import { mkdtemp, readFile, rm } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import { get } from "node:http";
+import { get, request } from "node:http";
 import { createGoogleAuth } from "../admin/google-auth.mjs";
 import { createAdminServer } from "../admin/server.mjs";
 
@@ -82,4 +82,36 @@ test("parent administration stays closed when Google or the operator allowlist i
   assert.equal((await fetch(origin + "/api/session")).status, 200);
   assert.equal((await fetch(origin + "/api/shops")).status, 401);
   assert.equal((await fetch(origin + "/auth/google", { redirect: "manual" })).status, 503);
+});
+
+test("HTTPS administration pins its host and origin while private Gmail relay requires its server secret", async t => {
+  const root = await mkdtemp(join(tmpdir(), "parent-public-auth-"));
+  const publicOrigin = "https://admin.dev.example", secret = "private-server-secret-".repeat(3);
+  const auth = createGoogleAuth({ root, env: { GOOGLE_CLIENT_ID: "fixture-client", GOOGLE_CLIENT_SECRET: "fixture-secret", PARENT_ADMIN_EMAILS: "admin@example.com", PARENT_AUTH_SECRET: "encryption-key-".repeat(3), PARENT_ORIGIN: publicOrigin }, oauthFactory: redirect => ({
+    generateAuthUrl() { return `https://accounts.google.com/authorize?redirect_uri=${encodeURIComponent(redirect)}`; },
+  }) });
+  let mails = 0;
+  auth.mail = async () => { mails++; };
+  const server = createAdminServer({ root, publicOrigin, auth, integrationSecret: secret });
+  await new Promise(resolve => server.listen(0, "127.0.0.1", resolve));
+  t.after(async () => { server.closeAllConnections(); await new Promise(resolve => server.close(resolve)); await rm(root, { recursive: true, force: true }); });
+  const call = (path, { method = "GET", headers = {}, body } = {}) => new Promise((resolve, reject) => {
+    const req = request({ host: "127.0.0.1", port: server.address().port, path, method, headers: { Host: "admin.dev.example", ...headers } }, response => {
+      response.resume(); response.on("end", () => resolve({ status: response.statusCode, headers: response.headers }));
+    });
+    req.on("error", reject); req.end(body);
+  });
+  assert.equal((await call("/")).status, 200);
+  assert.equal((await call("/api/shops")).status, 401);
+  assert.equal((await call("/api/session", { headers: { Host: "spoof.example" } })).status, 403);
+  assert.equal((await call("/api/logout", { method: "POST", headers: { Origin: "http://admin.dev.example" } })).status, 403);
+  const begin = await call("/auth/google");
+  assert.equal(begin.status, 302);
+  assert.equal(new URL(begin.headers.location).searchParams.get("redirect_uri"), `${publicOrigin}/auth/google/callback`);
+  assert.match(begin.headers["set-cookie"][0], /; Secure/);
+  const mail = { method: "POST", headers: { Host: "admin:8091", "Content-Type": "application/json" }, body: JSON.stringify({ to: "owner@example.com" }) };
+  assert.equal((await call("/api/internal/mail", mail)).status, 403);
+  assert.equal((await call("/api/internal/mail", { ...mail, headers: { ...mail.headers, Authorization: `Bearer ${secret}` } })).status, 200);
+  assert.equal(mails, 1);
+  assert.throws(() => createAdminServer({ root, publicOrigin: "http://admin.dev.example" }), /HTTPS/);
 });

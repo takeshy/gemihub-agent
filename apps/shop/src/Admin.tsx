@@ -3,7 +3,7 @@ import { useEffect, useState } from "react";
 import { useApi } from "./api";
 
 type Run = (fn: () => Promise<void>) => Promise<void>;
-type ProviderStatus = { model: string; designModel: string; imageModel: string; ready: boolean; key?: boolean; project?: boolean };
+type ProviderStatus = { model: string; designModel: string; imageModel: string; ready: boolean; key?: boolean; apiKey?: boolean; project?: boolean };
 type AdminStatus = {
   demoGoogle: { email: string; connectedAt: string; connectedBy: string; rootFolderId?: string; healthy?: boolean } | null;
   judge: { active: boolean; configured: boolean; until: string | null; aiLimit: number; inviteUrl: string; inviteUrlEn: string; inviteUrlJa: string };
@@ -11,7 +11,7 @@ type AdminStatus = {
 };
 type JudgeRow = { email: string; shopName: string | null; slug: string | null; publication: string | null; createdAt: string | null; aiUsed: number; aiLimit: number; resets: number; mails: number; lastUsedAt: string | null };
 const at = (value?: string | null) => value ? new Date(value).toLocaleString(intlLocale(), { timeZone: "Asia/Tokyo", year: "numeric", month: "numeric", day: "numeric", hour: "2-digit", minute: "2-digit" }) : "—";
-const providerName = (provider: "vertex" | "openai") => provider === "vertex" ? "Vertex AI (Gemini)" : "OpenAI";
+const providerName = (provider: "vertex" | "openai") => provider === "vertex" ? "Gemini" : "OpenAI";
 
 function Copy({ value }: { value: string }) {
   const [copied, setCopied] = useState(false);
@@ -95,7 +95,7 @@ export function Admin({ run }: { run: Run }) {
               <div><dt>{tr("モデル")}</dt><dd>{info.model || tr("未設定")}</dd></div>
               {info.designModel && <div><dt>{tr("デザイン生成モデル")}</dt><dd>{info.designModel}</dd></div>}
               <div><dt>{tr("画像モデル")}</dt><dd>{info.imageModel || tr("未設定")}</dd></div>
-              {provider === "openai" && <div><dt>{tr("APIキー")}</dt><dd>{info.key ? tr("設定済み") : tr("未設定")}</dd></div>}
+              {(provider === "openai" || info.apiKey) && <div><dt>{tr("APIキー")}</dt><dd>{info.key || info.apiKey ? tr("設定済み") : tr("未設定")}</dd></div>}
               <div><dt>{tr("状態")}</dt><dd>{info.ready ? tr("利用できます") : <span className="admin-bad">{tr("設定が足りません")}</span>}</dd></div>
             </dl>
             <div className="admin-actions">

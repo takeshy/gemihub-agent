@@ -40,7 +40,7 @@ const contentTypes: Record<string, string> = {
   ".map": "application/json; charset=utf-8",
 };
 /** The page's own modules and styles, served next to the generated bundle. */
-const siteFiles = new Set(["site.js", "ai-setup.js", "reservation-actions.js", "reserve-page.js", "review-dialog.js", "llm-relay.js", "llm-relay-sw.js", "assistant.css", "storefront-agent.css"]);
+const siteFiles = new Set(["site.js", "ai-setup.js", "ai-connection.js", "reservation-actions.js", "reserve-page.js", "review-dialog.js", "llm-relay.js", "llm-relay-sw.js", "assistant.css", "storefront-agent.css"]);
 /** Files other origins fetch: these, and only these, carry the CORS header. */
 const publicFiles = new Set(["agent-manifest.json", `${networkName}.network.json`, "links.json", "agent-mcp.json", ".well-known/nsdeploy.json", ".well-known/nsdeploy-agent.json"]);
 const generatedFiles = new Set([...publicFiles, "bridge/action-bridge.html", "bridge/agent-manifest.json"]);

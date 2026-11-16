@@ -115,6 +115,8 @@ export async function resolveShop(input, { shops = [], editingId, networkIndex, 
     if (shops.some(shop => shop.id !== editingId && (shop.id === id || shop.pageUrl === inputPage.url))) throw new Error(messages.duplicate);
     const previous = shops.find(shop => shop.id === editingId);
     const shop = { id, name: info.name, area: inferArea(info.address), cuisine: previous?.cuisine || "", pageUrl: inputPage.url, networkUrl: "", description: info.description, reservationEnabled: previous?.reservationEnabled ?? false };
+    if (info.address) shop.address = info.address.slice(0, 500);
+    else if (previous?.address) shop.address = previous.address;
     if (shop.reservationEnabled && previous?.reservationUrl) shop.reservationUrl = previous.reservationUrl;
     const cache = { fetchedAt: now().toISOString(), description: info.description, status: "connected", reservationSummary: "" };
     let warning;
@@ -189,6 +191,7 @@ export async function resolveShop(input, { shops = [], editingId, networkIndex, 
     if (typeof name !== "string" || !name.trim()) throw new Error("店名がありません");
     shop.name = name;
     shop.area = inferArea(info.address);
+    if (typeof info.address === "string" && info.address.trim()) shop.address = info.address.slice(0, 500);
     if (!discovery && info.reservePageUrl) shop.pageUrl = sameOrigin(info.reservePageUrl, `${base}/`);
     if (discovery) {
       shop.pageUrl = sameOrigin(info.shopPageUrl || info.pageUrl || `${base}/`, `${base}/`);
@@ -211,6 +214,7 @@ export async function resolveShop(input, { shops = [], editingId, networkIndex, 
         const info = extractShopPage(page.value);
         shop.name ||= info.name || (typeof manifest.value.brand === "string" ? manifest.value.brand : "");
         shop.area ||= inferArea(info.address);
+        if (info.address && !shop.address) shop.address = info.address.slice(0, 500);
         cache.description ||= info.description;
       } catch { /* Keep editable fields if the page cannot be read. */ }
     }

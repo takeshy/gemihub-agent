@@ -600,3 +600,17 @@ body[data-shop-view="open"] #shop-page-status[data-state="loaded"] ~ .shop-page-
 #agent-app .candidate-actions > .candidate-chat:only-child { background:var(--accent); color:#fff; }
 #agent-app .candidate-actions > .candidate-button:hover,
 #agent-app .candidate-actions > .candidate-chat:only-child:hover { background:#194637; }
+
+.shop-directory-tools { display:flex;align-items:end;gap:18px;flex-wrap:wrap;margin:20px 0; }
+.shop-directory-tools label, .shop-directory-map label { display:grid;gap:6px;font-size:.9rem;font-weight:600; }
+.shop-directory-tools select, .shop-directory-map select { max-width:100%;padding:10px 12px;border:1px solid var(--line);border-radius:8px;background:white;color:var(--ink); }
+.shop-directory-tools p { margin:0;padding:10px 0; }
+.shop-directory-map { border:1px solid var(--line);border-radius:16px;background:white;padding:20px;margin-bottom:24px; }
+.shop-directory-map h3 { margin-top:0; }
+.shop-directory-map iframe { display:block;width:100%;height:360px;border:0;border-radius:12px;margin:14px 0; }
+.shop-directory-map select { width:100%; }
+.shop-map-button { padding:8px 14px;border:1px solid var(--line);background:var(--paper);border-radius:8px;color:var(--accent);margin-top:8px; }
+.shop-map-button[aria-pressed=true] { border-color:var(--accent); }
+.shop-address { font-size:.85rem; }
+.shop-card[hidden], .shop-directory-map [hidden] { display:none!important; }
+@media(max-width:600px) { .shop-directory-map { padding:16px; } .shop-directory-map iframe { height:280px; } .shop-directory-tools label { width:100%; } }

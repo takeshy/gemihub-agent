@@ -3,7 +3,7 @@
 // (llm-relay.js). The visitor talks to the shop and reserves in the shop's page.
 // This site reserves nothing, and never shows a reservation as made.
 import { allergenLabel, COURSE_LABELS } from "./finder.js";
-import { canReserve, hasAgent } from "./shop-data.js";
+import { canCheckReservations, hasAgent } from "./shop-data.js";
 
 const STORAGE_KEY = "reservation-finder-shop-v1";
 const FRAME_WAIT_MS = 8000;
@@ -78,7 +78,8 @@ export class ShopFrame {
       this.showError(reason);
       return { ok: false, reason };
     }
-    if (target === "reserve" && !canReserve(shop)) return { ok: false, reason: "この店の予約ページは登録されていません。店舗ページをご覧ください。" };
+    if (target === "reserve" && !canCheckReservations(shop)) return { ok: false, reason: "この店の予約情報は取得できません。店舗サイトをご覧ください。" };
+    if (!hasAgent(shop)) return { ok: false, reason: "このお店は店舗サイトのリンクから開いてください。" };
     if (!this.shop) { this.previousScroll = scrollY; this.previousFocus = document.activeElement; }
     this.endRelay();
     this.shop = shop;
@@ -92,11 +93,6 @@ export class ShopFrame {
     previous.replaceWith(frame);
     frame.title = `${shop.name}${target === "reserve" ? "の予約ページ" : "のページ"}`;
     frame.src = framed.url;
-    if (!hasAgent(shop)) frame.addEventListener("load", () => {
-      clearTimeout(this.frameTimer);
-      status.dataset.state = "loaded";
-      status.textContent = "表示されない場合は、別タブでお店のサイトを開いてください。";
-    }, { once: true });
     this.element("shop-page-newtab").href = framed.url;
     const status = this.element("shop-page-status");
     status.dataset.state = "loading";

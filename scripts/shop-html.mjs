@@ -32,7 +32,7 @@ export function extractShopPage(html) {
     } catch { /* Metadata is optional; never execute page scripts. */ }
   }
   const shop = objects.slice(0, 200).find(item => [item?.["@type"]].flat().some(type => typeof type === "string" && /(?:Store|Shop|LocalBusiness|Organization|Restaurant|CafeOrCoffeeShop|Service)$/.test(type))) || {};
-  const address = typeof shop.address === "string" ? shop.address : [shop.address?.addressRegion, shop.address?.addressLocality].filter(item => typeof item === "string").join("");
+  const address = typeof shop.address === "string" ? shop.address : [shop.address?.postalCode ? `〒${shop.address.postalCode}` : "", shop.address?.addressRegion, shop.address?.addressLocality, shop.address?.streetAddress].filter(item => typeof item === "string").join("");
   return {
     name: text(shop.name || meta["og:site_name"] || meta["og:title"] || html.match(/<title\b[^>]*>([\s\S]*?)<\/title\s*>/i)?.[1]).slice(0, 200),
     description: text(shop.description || meta.description || meta["og:description"]).slice(0, 2000),

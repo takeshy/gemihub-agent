@@ -1,0 +1,9 @@
+# Update parent administration and its shared UI sources on a verified application image.
+ARG BASE_IMAGE
+FROM ${BASE_IMAGE}
+WORKDIR /app
+COPY admin/ admin/
+COPY site/assistant.css site/assistant.css
+COPY apps/shop/src/ImageLibrary.tsx apps/shop/src/RequestImagePicker.tsx apps/shop/src/
+COPY apps/shop/shared/en.json apps/shop/shared/en.json
+RUN npm run build:admin

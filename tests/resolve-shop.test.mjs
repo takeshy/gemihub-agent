@@ -39,7 +39,7 @@ for (const suffix of ["", "/", "/reserve", "/agent/", "/agent/agent-manifest.jso
   test(`resolve URL ${suffix || "top"}, with only a read-only MCP call`, async () => {
     const mock = fixture();
     const result = await resolveShop(`${base}${suffix}?key=discarded#secret`, { fetch: mock.fetch });
-    assert.deepEqual(result.shop, { id: "akari", name: "炉端 灯", area: "東京都新宿区", cuisine: "", pageUrl: `${base}/reserve`, networkUrl: `${base}/agent/reservation_concierge` });
+    assert.deepEqual(result.shop, { id: "akari", name: "炉端 灯", area: "東京都新宿区", address: "〒160-0022 東京都新宿区新宿1-1", cuisine: "", pageUrl: `${base}/reserve`, networkUrl: `${base}/agent/reservation_concierge` });
     assert.equal(result.cache.status, "connected");
     assert.equal(result.cache.reservationSummary, "1〜24名、席のみ可");
     assert.ok(mock.calls.every(call => !call.url.includes("discarded")));

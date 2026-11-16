@@ -1,4 +1,6 @@
 .git
+admin/site-editor.json
+admin/site-editor.json.*.tmp
 **/node_modules
 **/dist
 **/.data
@@ -13,5 +15,12 @@
 **/.codex
 **/.agents
 **/.claude
+**/.terraform
+**/*.tfstate*
+**/*.tfplan
+**/*.tfvars
+**/backend.hcl
 apps/shop/infra/*
 !apps/shop/infra/domain-controller.py
+
+admin/site-images/

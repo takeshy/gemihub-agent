@@ -4521,5 +4521,21 @@
   "予約ページに「お店から確認のお電話を差し上げます」と表示します。": "The reservation page says the restaurant will call to confirm.",
   "予約が入ったら、お客様へ折り返しの確認電話をする": "Call guests back to confirm each reservation",
   "確認の電話は不要です。ご予約時刻から{0}分を過ぎてもご来店がない場合は、他のお客様をご案内できます。": "No confirmation call is needed. If the party has not arrived {0} minutes after the reservation time, you may seat other guests.",
-  "折り返しの電話はしません。予約ページに「ご予約時刻から{0}分を過ぎてもご来店がない場合は、他のお客様をご案内します」と表示します。": "No call is made. The reservation page says that seats go to other guests when a party has not arrived {0} minutes after the reservation time."
+  "折り返しの電話はしません。予約ページに「ご予約時刻から{0}分を過ぎてもご来店がない場合は、他のお客様をご案内します」と表示します。": "No call is made. The reservation page says that seats go to other guests when a party has not arrived {0} minutes after the reservation time.",
+  "AIの利用上限に達しました。しばらくしてからお試しください。": "The AI usage limit has been reached. Try again later.",
+  "JSONで送信してください。": "Send the request as JSON.",
+  "メッセージが長すぎます。": "The message is too long.",
+  "メッセージの形式を確認してください。": "Check the message format.",
+  "このサイトからAIを利用してください。": "Use the AI from this site.",
+  "運営側のGeminiは現在利用できません。AIの設定からご自身のAPIキーも使えます。": "The site's Gemini is currently unavailable. You can also use your own API key in AI settings.",
+  "AIの接続期限が切れました。ページを再読み込みしてください。": "The AI connection has expired. Reload the page.",
+  "見つかりません。": "Not found.",
+  "AIが混み合っています。少し待ってからお試しください。": "The AI is busy. Wait a little and try again.",
+  "会話が長くなりました。新しい会話を始めてください。": "This conversation is too long. Start a new conversation.",
+  "会話の期限が切れました。新しい会話を始めてください。": "This conversation has expired. Start a new conversation.",
+  "会話の内容を確認できません。新しい会話を始めてください。": "The conversation could not be verified. Start a new conversation.",
+  "Geminiに接続できませんでした。少し待ってからお試しください。": "Could not connect to Gemini. Wait a little and try again.",
+  "AIの応答を取得できませんでした。少し待ってからお試しください。": "Could not get an AI response. Wait a little and try again.",
+  "10MB以内のPNG・JPEG・GIF・WebP画像を選んでください。": "Choose a PNG, JPEG, GIF or WebP image up to 10 MB.",
+  "PNG・JPEG・GIF・WebP、1枚10MBまで。お客様メモの添付はこの一覧には表示しません。": "PNG, JPEG, GIF or WebP, up to 10 MB each. Attachments from customer notes are not shown here."
 }

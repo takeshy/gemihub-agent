@@ -2,7 +2,7 @@ import { App } from "./script.js";
 
 const string = (description, maxLength = 200) => ({ type: "string", maxLength, description });
 const integer = (description, maximum, minimum = 0) => ({ type: "integer", minimum, maximum, description });
-const shopId = { type: "string", enum: App.page.shops.map(shop => shop.id), description: "website_list_registered_shops が返した店のID。" };
+const shopId = { type: "string", ...(App.page.shops.length ? { enum: App.page.shops.map(shop => shop.id) } : {}), description: "website_list_registered_shops が返した店のID。" };
 const version = integer("同じターンに読んだ状態または条件更新の最新version。条件が変わると拒否されます。", Number.MAX_SAFE_INTEGER);
 
 export function registerActions(actions) {

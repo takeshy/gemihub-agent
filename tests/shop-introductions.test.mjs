@@ -3,10 +3,12 @@ import test from "node:test";
 import { validateShops } from "../scripts/shops.mjs";
 import { extractShopPage } from "../scripts/shop-html.mjs";
 import { resolveShop } from "../scripts/resolve-shop.mjs";
-import { canReserve, hasAgent, reservationPageUrl, shopPageUrl } from "../site/shop-data.js";
+import { canReserve, hasAgent, canCheckReservations, reservationPageUrl, shopPageUrl } from "../site/shop-data.js";
 import { FinderPage } from "../site/finder.js";
 import { installInquiryPolicy, ShopInquiries } from "../site/inquiries.js";
 import { ShopFrame } from "../site/shop-frame.js";
+import { App } from "../site/script.js";
+import { StubDocument } from "./stub_document.mjs";
 
 const origin = "https://shops.example";
 const store = { id: "zakka", name: "暮らしの雑貨店", area: "東京都新宿区", cuisine: "雑貨・生活雑貨", description: "器や文具、贈り物を扱うお店。", pageUrl: `${origin}/s/zakka/`, networkUrl: "", reservationEnabled: false };
@@ -21,6 +23,39 @@ test("agent and reservation capabilities support all four combinations", () => {
   assert.equal(validated[0].networkTool, undefined);
   assert.equal(validated[1].networkTool, "s_agent_shop_agent_shop_guide");
   assert.equal(validated[0].description, store.description);
+  assert.deepEqual(validated.map(canCheckReservations), [false, false, false, true]);
+});
+
+test("ordinary shop reservation links keep their routing query without allowing query-bearing agent URLs", () => {
+  const input = { ...bookable, reservationUrl: `${origin}/s/bookable/?pane=reserve` };
+  const [shop] = validateShops({ version: 1, shops: [input] }, { production: true });
+  assert.equal(reservationPageUrl(shop), input.reservationUrl);
+  assert.throws(() => validateShops({ version: 1, shops: [{ ...input, networkUrl: `${origin}/agent/shop?token=unsafe` }] }));
+  assert.throws(() => validateShops({ version: 1, shops: [{ ...input, reservationUrl: `${input.reservationUrl}#private` }] }));
+});
+test("a reservation URL without an agent is shown only as a normal shop link", t => {
+  const before = globalThis.document;
+  t.after(() => { globalThis.document = before; });
+  globalThis.document = new StubDocument();
+  const plain = App.introductionCard(bookable);
+  assert.equal(plain.querySelectorAll("button").some(button => button.textContent === "予約ページへ"), false);
+  const [link] = plain.querySelectorAll("a");
+  assert.equal(link.href, bookable.pageUrl);
+  assert.equal(link.target, "_blank");
+  assert.equal(plain.querySelectorAll("p").some(p => p.textContent.includes("予約ページあり")), false);
+  assert.equal(App.introductionCard(full).querySelectorAll("button").some(button => button.textContent === "予約ページへ"), true);
+});
+test("agentless reservation URLs cannot bypass the hidden control through a tool or restored frame", () => {
+  const page = new FinderPage([bookable, full], { now: () => new Date("2026-11-15T00:00:00Z") });
+  page.setConditions({ date: "2026-12-18", time: "19:00", partySize: 2 });
+  assert.equal(page.checkOpenShop({ shopId: bookable.id, expectedVersion: page.version }).ok, false);
+  assert.equal(page.framedShopUrl(bookable.id, "reserve").ok, false);
+  assert.deepEqual(page.framedShopUrl(bookable.id, "shop"), { url: bookable.pageUrl, conditions: null });
+  assert.equal(page.showCandidates({ candidates: [{ shopId: bookable.id, status: "available", summary: "unverified" }], expectedVersion: page.version }).ok, false);
+  const frame = new ShopFrame({ shops: [bookable], relay: {}, getPage: () => page, modelName: () => "fixture" });
+  assert.equal(frame.open(bookable.id, { target: "reserve" }).ok, false);
+  assert.equal(frame.open(bookable.id, { target: "shop" }).ok, false);
+  assert.equal(frame.shop, null);
 });
 test("legacy restaurants preserve their reservation pages", () => {
   const legacy = { ...store, pageUrl: `${origin}/s/zakka/reserve` };
@@ -81,7 +116,7 @@ test("shop introductions and filters work before dates or party size are provide
   assert.equal(page.getState().valid, false);
   assert.equal(page.showIntroductions({ shopIds: [store.id, agentShop.id] }).ok, true);
   assert.deepEqual(page.getState().introductions, [store.id, agentShop.id]);
-  assert.deepEqual(page.listShops({ purpose: "reservation" }).map(shop => shop.id), [bookable.id, full.id]);
+  assert.deepEqual(page.listShops({ purpose: "reservation" }).map(shop => shop.id), [full.id]);
   assert.equal(page.listShops({ query: "贈り物" }).length, 4);
   assert.equal(page.listShops({ query: "未掲載の商品" }).length, 0);
   const before = page.getState();

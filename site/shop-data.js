@@ -6,6 +6,8 @@ export function reservationPageUrl(shop) {
 
 export const canReserve = shop => !!reservationPageUrl(shop);
 export const hasAgent = shop => !!shop?.networkUrl;
+// A reservation URL alone does not provide availability or a supported embedded page.
+export const canCheckReservations = shop => hasAgent(shop) && canReserve(shop);
 
 export function shopPageUrl(shop) {
   const url = new URL(shop.pageUrl);

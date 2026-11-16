@@ -77,8 +77,8 @@ test("serialized deletes preserve other changes and prune cache", async t => {
   assert.deepEqual(result.shops.map(shop => shop.id), ["kanton-ryu"]);
   assert.equal(result.cache.akari, undefined);
   await assert.rejects(store.delete("unknown"), /見つかりません/);
-  await assert.rejects(store.delete("kanton-ryu"), /1店以上/);
-  assert.deepEqual((await store.get()).shops, result.shops);
+  await store.delete("kanton-ryu");
+  assert.deepEqual((await store.get()).shops, []);
 });
 
 test("successful refresh clears an earlier error and production saves build HTTPS peers", async t => {

@@ -8,6 +8,7 @@ import { mountAISetup } from "./ai-setup.js";
 import { ShopInquiries, installInquiryPolicy, reviewShopInquiries } from "./inquiries.js";
 import { ShopFrame } from "./shop-frame.js";
 import { LlmRelay } from "./llm-relay.js";
+import { aiConnection, mountAiConnection } from "./ai-connection.js";
 
 /**
  * Boots the browser runtime in the page's assistant section.
@@ -65,7 +66,7 @@ export class AssistantMount {
   static DIALOGS = {
     open_shop_page: {
       title: "この条件を持って、お店のページへ移動しますか？",
-      sentence: "日時・人数・コースの要否・予算・避けたい食材を渡します。名前や連絡先は渡しません。予約の確定は移動先で行います。お店のページでもAIのキー設定が必要です。",
+      sentence: "日時・人数・コースの要否・予算・避けたい食材を渡します。名前や連絡先は渡しません。予約の確定は移動先で行います。",
       confirm: "条件を引き継いで移動",
       decline: "このページに戻る",
     },
@@ -82,9 +83,11 @@ export class AssistantMount {
     try {
       // Load the runtime here, so a missing or broken runtime is reported too.
       const { boot } = await import("./runtime/index.js");
+      const connection = await aiConnection();
       const booted = await boot("#agent-app", {
         originUrl: siteBase,
         sandboxWorkerUrl: new URL("runtime/sandbox-worker.js", siteBase).href,
+        ...(connection?.setup || {}),
       });
       AssistantMount.engine = booted.engine;
       AssistantMount.mountChatControls();
@@ -110,6 +113,7 @@ export class AssistantMount {
       AssistantMount.greet();
       App.mountChat();
       mountAISetup(booted.engine);
+      mountAiConnection(booted.engine, connection);
       // Last, so a shop named in the address opens once the AI setup is known.
       App.shopFrame.mount();
       return booted.engine;
@@ -132,7 +136,7 @@ export class AssistantMount {
   static greet() {
     const first = document.querySelector("#ns-msgs .ns-msg.bot");
     if (first) {
-      first.textContent = AssistantMount.GREETING;
+      first.textContent = document.getElementById("assistant")?.dataset.greeting || AssistantMount.GREETING;
     }
   }
 

@@ -1,3 +1,4 @@
+import { AnnotationCanvas } from "./AnnotationCanvas";
 import { aiName } from "./ai-name";
 import { tr } from "../shared/i18n";
 import { useLeaveGuard } from "./leave-guard";
@@ -139,7 +140,6 @@ export function VisualRequest({shopId, config, root, local, screen, onLocalChang
   const canvas = useRef<HTMLCanvasElement>(null);
   const composer = useRef<HTMLTextAreaElement>(null);
   const log = useRef<HTMLDivElement>(null);
-  const drawing = useRef(false);
   const alive = useRef(true);
   const pendingContext = useRef("");
   const failed = useRef<string | undefined>(undefined);
@@ -270,21 +270,7 @@ export function VisualRequest({shopId, config, root, local, screen, onLocalChang
     {(!triggerHost || image) && <div className="visual-request panel" data-capture-ignore>
       {!triggerHost && <>{trigger}{!open && history.entries.length > 1 && historyControls}</>}
       {image && <>
-        <canvas ref={canvas} aria-label={tr("変更したい箇所を囲む画面")} className="annotation-canvas"
-          onPointerDown={event => {
-            if (locked) return;
-            event.preventDefault(); event.currentTarget.setPointerCapture(event.pointerId); drawing.current = true;
-            const rect = event.currentTarget.getBoundingClientRect(), ctx = event.currentTarget.getContext("2d")!;
-            ctx.beginPath(); ctx.strokeStyle = "#e32236"; ctx.lineWidth = 5; ctx.lineCap = "round";
-            ctx.moveTo((event.clientX - rect.left) * event.currentTarget.width / rect.width, (event.clientY - rect.top) * event.currentTarget.height / rect.height);
-            setMarked(true); setResult(undefined);
-          }}
-          onPointerMove={event => {
-            if (!drawing.current || locked) return;
-            const rect = event.currentTarget.getBoundingClientRect(), ctx = event.currentTarget.getContext("2d")!;
-            ctx.lineTo((event.clientX - rect.left) * event.currentTarget.width / rect.width, (event.clientY - rect.top) * event.currentTarget.height / rect.height); ctx.stroke();
-          }} onPointerUp={() => { drawing.current = false; }} onPointerCancel={() => { drawing.current = false; }}
-        />
+        <AnnotationCanvas canvasRef={canvas} disabled={locked} onMark={() => { setMarked(true); setResult(undefined); }} />
         <button type="button" className="text-button" disabled={locked || !marked} onClick={() => void reset()}>{tr("印を消して描き直す")}</button>
       </>}
     </div>}

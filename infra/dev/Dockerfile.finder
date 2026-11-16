@@ -1,0 +1,5 @@
+# For changes limited to these parent-site modules. Use Dockerfile for other changes.
+# BASE_IMAGE must be the immutable digest currently deployed to the dev VM.
+ARG BASE_IMAGE
+FROM ${BASE_IMAGE}
+COPY site/shop-data.js site/script.js site/finder.js site/shop-frame.js /app/site/

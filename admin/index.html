@@ -10,13 +10,16 @@
 <body>
   <main>
     <header class="page-header">
-      <div><p class="eyebrow">お店さがし / ローカル管理</p><h1>つながるお店</h1><p>店のURLから情報を読み込み、紹介するお店に追加します。</p></div>
+      <div><p class="eyebrow">お店さがし / 運営管理</p><h1>つながるお店</h1><p>店のURLから情報を読み込み、紹介するお店に追加します。</p></div>
       <button id="add-shop" type="button" hidden>＋ 店を追加</button>
     </header>
     <section id="operator" class="panel" aria-label="運営者ログイン">
       <p id="operator-status">運営者のログインを確認しています…</p>
       <a id="google-login" href="/auth/google" hidden>Googleでログイン</a>
       <button id="logout" class="secondary" type="button" hidden>ログアウト</button>
+    </section>
+    <section id="site-design" class="panel" hidden aria-labelledby="site-design-heading">
+      <div class="section-header"><div><h2 id="site-design-heading">お店さがしのページ</h2><p class="note">見た目や文章をAIに相談して変更できます。</p></div><button id="site-design-toggle" type="button">AIでページを編集</button></div>
     </section>
     <section id="invitations" class="panel" hidden>
       <h2>お店を招待する</h2>
@@ -55,6 +58,7 @@
           <label>店のID<input name="id" pattern="[a-z0-9][a-z0-9-]{0,79}" maxlength="80" required><span class="note">英小文字・数字・ハイフン。保存後は変更できません。</span></label>
           <label>店名<input name="name" required></label>
           <label>エリア<input name="area" placeholder="例: 東京都新宿区" required></label>
+          <label class="wide">住所（地図用・任意）<input name="address" maxlength="500" placeholder="例: 神奈川県横浜市港北区大倉山２丁目１０"><span class="note">番地まで入れると地図に表示できます。</span></label>
           <label>ジャンル（編集可）<input name="cuisine" placeholder="例: 雑貨・生活雑貨、和食・炉端焼き" maxlength="80" required></label>
           <label class="wide">紹介文<textarea name="description" rows="3" maxlength="2000" placeholder="お店の特徴や扱っている商品・サービス"></textarea></label>
           <label class="wide">店舗ページURL<input name="pageUrl" type="url" required></label>

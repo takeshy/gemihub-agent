@@ -8,3 +8,8 @@ admin/cache.json
 admin/cache.json.*.tmp
 admin/auth.json
 admin/auth.json.*.tmp
+admin/site-editor.json
+admin/site-editor.json.*.tmp
+
+admin/site-images/
+admin/dist/

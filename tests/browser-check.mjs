@@ -65,7 +65,7 @@ try {
     body: JSON.stringify({ data: [{ id: "openai/gpt-6-luna" }] }),
   }));
   await page.goto(base);
-  await page.waitForFunction(() => { const engine = window.__nsweb?.engine; return engine?.actions.catalog({ base: engine.top.base, network: engine.top.network.name }).length === 8; });
+  await page.waitForFunction(() => { const engine = window.__nsweb?.engine; return engine?.actions.catalog({ base: engine.top.base, network: engine.top.network.name }).length === 9; });
   assert.equal(shopRequests.length, 0);
   assert.equal(modelRequests.length, 0);
   assert.equal(await page.locator("#shop-list .shop-card").count(), 3);
@@ -220,14 +220,17 @@ try {
   const checkCardActions = async () => {
     const geometry = await page.locator('.finder-results[data-current="true"] .candidate-actions').evaluateAll(groups => groups.map(group => {
       const buttons = [...group.querySelectorAll("button")];
-      return buttons.map(button => {
+      return { available: !!group.closest(".candidate-card").querySelector(".status-available"), buttons: buttons.map(button => {
         const rect = button.getBoundingClientRect();
         return { width:rect.width, height:rect.height, top:rect.top, bottom:rect.bottom, radius:getComputedStyle(button).borderRadius };
-      });
+      }) };
     }));
     assert.ok(geometry.length);
-    for (const pair of geometry) {
-      assert.equal(pair.length, 2);
+    // Availability comes from the status badge, so an available card that lost its reservation button still fails below.
+    assert.ok(geometry.some(group => group.available), "the results include an available shop with both actions");
+    for (const { available, buttons: pair } of geometry) {
+      assert.equal(pair.length, available ? 2 : 1, "only available shops offer a reservation action");
+      if (!available) continue;
       assert.ok(Math.abs(pair[0].width - pair[1].width) < 1, "card actions have equal widths");
       assert.ok(Math.abs(pair[0].height - pair[1].height) < 1, "card actions have equal heights");
       assert.equal(pair[0].radius, pair[1].radius);

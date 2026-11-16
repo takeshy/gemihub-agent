@@ -42,6 +42,8 @@ export class ShopFrame {
     this.target = "shop";
     this.conditions = null;
     this.frameTimer = null;
+    this.voiceSequence = 0;
+    this.voicePending = null;
     relay.onChange = () => {};
   }
   element(id) { return document.getElementById(id); }
@@ -123,7 +125,8 @@ export class ShopFrame {
     this.previousFocus?.focus({ preventScroll: true });
     scrollTo(0, this.previousScroll || 0);
   }
-  endRelay() {
+  endRelay({ keepVoice = false } = {}) {
+    if (!keepVoice && this.voicePending) { this.voicePending.reject(new Error("お店の音声会話を終了しました。")); this.voicePending = null; }
     const closed = this.relay.close();
     if (closed) this.post({ type: "gemihub:relay-closed", session: closed.id, reason: "The shop page was closed." });
   }
@@ -131,6 +134,12 @@ export class ShopFrame {
     const frame = this.element("shop-page-frame");
     if (!fromShopFrame(event, frame.contentWindow, this.shop)) return;
     const data = event.data;
+    const pending = this.voicePending;
+    if (pending && data.channel === pending.channel && data.shop === this.shop.id) {
+      if (data.type === "gemihub:voice-ready") { pending.ready = true; this.post({ type: "gemihub:voice-question", channel: pending.channel, id: pending.id, question: pending.question }); return; }
+      if (data.type === "gemihub:voice-answer" && data.id === pending.id && typeof data.answer === "string" && data.answer.length <= 20000) { pending.resolve(data.answer); return; }
+      if (data.type === "gemihub:voice-error" && data.id === pending.id) { pending.reject(new Error("この店の音声会話に接続できませんでした。店舗ページを確認してください。")); return; }
+    }
     if (!hasAgent(this.shop) && data.type !== "gemihub:reserve-ready") return;
     if (data.type === "gemihub:reserve-ready" && data.version === 1 && data.shop === this.shop.id) {
       clearTimeout(this.frameTimer);
@@ -138,7 +147,7 @@ export class ShopFrame {
       this.element("shop-page-status").textContent = "";
     } else if (data.type === "gemihub:relay-hello" && data.version === 1 && data.shop === this.shop.id) {
       // The visitor opens the shop's AI from its own button. No key is sent to the frame.
-      this.endRelay();
+      this.endRelay({ keepVoice: true });
       if (!this.relay.ready()) {
         this.post({ type: "gemihub:relay-denied", reason: "Set up AI on the finder site first." });
         this.element("ai-settings-open").click();
@@ -164,6 +173,21 @@ export class ShopFrame {
     this.element("shop-page-panel").hidden = !open;
     this.element("assistant-layout").dataset.page = open ? "open" : "closed";
     this.element("shop-name").textContent = this.shop?.name || "";
+    this.onChange?.();
+  }
+  askVoice(question, signal) {
+    if (!this.shop || !hasAgent(this.shop) || this.voicePending || typeof question !== "string" || question.length > 4000 || signal?.aborted) return Promise.reject(new Error("お店の会話を準備できませんでした。"));
+    return new Promise((resolve, reject) => {
+      const channel = `voice-${Date.now()}-${++this.voiceSequence}`, id = channel;
+      const cleanup = () => { clearInterval(retry); clearTimeout(timeout); signal?.removeEventListener("abort", abort); if (this.voicePending?.channel === channel) this.voicePending = null; };
+      const abort = () => { this.post({ type: "gemihub:voice-cancel", channel, id }); cleanup(); reject(new Error("音声の質問を中止しました。")); };
+      const pending = { channel, id, question, ready: false, resolve: answer => { cleanup(); resolve(answer); }, reject: error => { cleanup(); reject(error); } };
+      this.voicePending = pending;
+      const connect = () => { if (!pending.ready) this.post({ type: "gemihub:voice-connect", channel, shop: this.shop?.id }); };
+      const retry = setInterval(connect, 500);
+      const timeout = setTimeout(() => { this.post({ type: "gemihub:voice-cancel", channel, id }); pending.reject(new Error("お店の返答を確認できませんでした。画面を確認してください。")); }, 120000);
+      signal?.addEventListener("abort", abort, { once: true }); connect();
+    });
   }
   mount() {
     this.element("shop-close").addEventListener("click", () => this.close());

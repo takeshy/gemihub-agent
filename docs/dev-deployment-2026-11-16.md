@@ -194,3 +194,11 @@ Num05の予約画面はHTTP 200だが、`X-Frame-Options: DENY` と `frame-ances
 - 親132件・店舗644件のテストが成功。`tests/admin-browser-check.mjs` は招待フォーム追加以降の `[name="name"]` の重複で失敗する状態のまま（今回の変更とは無関係、未修正）。
 - Cloud Build `6c6796ea-f3a2-49ca-b323-beb38ddb187b`: SUCCESS。イメージ `asia-northeast1-docker.pkg.dev/geminihub-486523/gemihub-dev/app:dev-20261116-demo-login`。
 - 公開devで、誤ったトークン404、正しいURLで302→運営者セッション、店舗一覧API200、未ログイン401、お店さがし・店舗アプリ200を確認。
+
+### お店さがしへのリンクとページ編集の分割を配備
+
+`main`（`2dd4a8e`）の管理画面を、直前の稼働イメージへ重ねて配備した。管理画面右上の「お店さがしを開く」リンクと、Storybook用に `admin/editor/FinderEditor.tsx` へ切り出したページ編集画面を含む。
+
+- Cloud Build `6c4b9bd8-f254-4426-878f-7931095083e0`: SUCCESS。イメージ `asia-northeast1-docker.pkg.dev/geminihub-486523/gemihub-dev/app:dev-20261116-finder-link`。
+- Terraform計画はイメージ変更だけ（追加0・変更1・削除0）で、適用成功。
+- 公開devで、審査員用URLからのログイン、リンク先 `https://dev.gemihub.net/`、店舗一覧API200、ページ編集画面の表示、未ログインのAPI401、お店さがし・店舗アプリ200を確認。PC1440px／スマホ390pxでJavaScriptエラー・横方向のはみ出しなし。

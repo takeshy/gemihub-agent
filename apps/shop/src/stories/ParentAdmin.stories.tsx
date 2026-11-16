@@ -1,6 +1,6 @@
 import React from "react";
 import type { Meta, StoryObj } from "@storybook/react-vite";
-import { ParentFrame, parentShop, type ParentShop } from "./ParentFrame";
+import { ParentFrame, parentShop, parentDocuments, type ParentShop } from "./ParentFrame";
 
 // The administration page of the parent finder (admin/), with fixture shops and no server.
 const shops: ParentShop[] = [
@@ -30,3 +30,6 @@ export const NotConfigured: Story = { name: "ログイン未設定", args: { sce
 export const Empty: Story = { name: "登録店なし", args: { scenario: { page: "admin" } } };
 export const Shops: Story = { name: "登録店あり", args: { scenario: { page: "admin", shops, cache } } };
 export const AddShop: Story = { name: "店を追加", args: { scenario: { page: "admin", shops, cache, open: "add" } } };
+export const DocumentsEmpty: Story = { name: "チャットの資料・資料なし", args: { scenario: { page: "admin", shops } } };
+export const Documents: Story = { name: "チャットの資料・公開中と下書き", args: { scenario: { page: "admin", shops, documents: parentDocuments } } };
+export const DocumentPreview: Story = { name: "チャットの資料・本文を確認して公開", args: { scenario: { page: "admin", documents: [parentDocuments[1]], open: "document" } } };

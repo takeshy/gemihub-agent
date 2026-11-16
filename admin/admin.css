@@ -55,3 +55,11 @@ select { margin: 8px 0 12px; }
 #invite-form { align-items:end; }
 #invite-form select { margin:0; }
 #invite-form > button { align-self:end; justify-self:start; }
+#documents-list { list-style: none; padding: 0; }
+.document-item { display: flex; flex-wrap: wrap; justify-content: space-between; gap: 12px; padding: 14px 0; border-top: 1px solid #e4e9e2; overflow-wrap: anywhere; }
+.document-item p { font-size: .88rem; margin: 4px 0 0; }
+.document-actions { display: flex; flex-wrap: wrap; gap: 8px; }
+#document-upload { align-items: end; flex-wrap: wrap; }
+#document-upload label { flex: 1; }
+#document-preview label { margin: 12px 0; }
+#documents-status { overflow-wrap: anywhere; }

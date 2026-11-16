@@ -1,6 +1,6 @@
 import React from "react";
 import type { Meta, StoryObj } from "@storybook/react-vite";
-import { ParentFrame, parentShop, type ParentShop } from "./ParentFrame";
+import { ParentFrame, parentShop, parentDocuments, type ParentShop } from "./ParentFrame";
 
 // The public parent finder (site/), with fixture shops. Chat answers are fixed; no AI is contacted.
 const shops: ParentShop[] = [
@@ -27,3 +27,6 @@ export const Shops: Story = { name: "登録店あり", args: { scenario: { page:
 export const Empty: Story = { name: "登録店なし", args: { scenario: { page: "site" } } };
 export const Map: Story = { name: "地図でお店を確認", args: { scenario: { page: "site", shops: withAddress } } };
 export const OwnKey: Story = { name: "自分のAPIキーを使う", args: { scenario: { page: "site", shops, ai: "byok" } } };
+export const DocumentAnswer: Story = { name: "公開資料から地域の情報を回答", args: { scenario: { page: "site", documents: parentDocuments, open: "document-answer" } } };
+export const VoiceGuide: Story = { name: "地域の案内を音声で相談", args: { scenario: { page: "site", documents: parentDocuments, voice: true } } };
+export const VoiceShop: Story = { name: "話し相手を店舗に切り替える", args: { scenario: { page: "site", documents: parentDocuments, voice: true, shops: [parentShop("voice-demo", "音声相談のサンプル店", { area: "東京", cuisine: "雑貨", pageUrl: "https://voice-demo.example/", networkUrl: "https://voice-demo.example/agent/guide", reservationEnabled: false })] } } };

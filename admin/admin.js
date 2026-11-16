@@ -1,5 +1,6 @@
 import { canReserve, hasAgent, reservationPageUrl, shopPageUrl } from "/shop-data.js";
 import { mountSiteEditor } from "/site-editor.js";
+import { mountChatDocuments } from "/chat-documents-ui.js";
 
 const $ = selector => document.querySelector(selector);
 const keys = ["id", "name", "area", "cuisine", "pageUrl", "networkUrl", "description", "address", "reservationUrl"];
@@ -205,5 +206,6 @@ run(async () => {
     state = await api("/api/shops"); render(); mountSiteEditor({ api });
     const { publicUrl } = await api("/api/site");
     if (publicUrl) { $("#finder-link").href = publicUrl; $("#finder-link").hidden = false; }
+    await mountChatDocuments({ api, run });
   }
 });

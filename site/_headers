@@ -16,6 +16,9 @@
 /.well-known/nsdeploy-agent.json
   Access-Control-Allow-Origin: *
 
+/chat-documents.json
+  Cache-Control: no-store
+
 /*
   Referrer-Policy: no-referrer
   X-Content-Type-Options: nosniff

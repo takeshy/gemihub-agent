@@ -1,6 +1,9 @@
 import React from "react";
+import documentFixtures from "./parent-documents.json";
 
 export type ParentShop = { id: string; name: string; area: string; cuisine: string; pageUrl: string; address?: string; description?: string; networkUrl?: string; networkTool?: string; reservationEnabled?: boolean; reservationUrl?: string };
+export type ParentDocument = { id: string; name: string; text: string; published: boolean; updatedAt: string };
+export const parentDocuments: ParentDocument[] = documentFixtures;
 export type ParentScenario = {
   page: "admin" | "site";
   shops?: ParentShop[];
@@ -8,7 +11,9 @@ export type ParentScenario = {
   user?: boolean;
   configured?: boolean;
   ai?: "managed" | "byok";
-  open?: "add";
+  documents?: ParentDocument[];
+  voice?: boolean;
+  open?: "add" | "document" | "document-answer";
 };
 
 /** The translation check reads `name`/`title` in story files as explorer labels, so fixtures use this helper and `label`. */
@@ -19,6 +24,7 @@ export const parentShop = (id: string, shopName: string, rest: Omit<ParentShop, 
  * `.storybook/parent-frame/mock.js` loads the page and answers its API calls from the scenario.
  */
 export function ParentFrame({ label, scenario }: { label: string; scenario: ParentScenario }) {
+  if (scenario.voice && scenario.shops?.some(shop => shop.id === "voice-demo")) scenario = { ...scenario, shops: scenario.shops.map(shop => shop.id === "voice-demo" ? { ...shop, pageUrl: new URL("parent-frame/voice-shop.html", location.href).href } : shop) };
   return <>
     <h2 style={{ position: "absolute", width: 1, height: 1, overflow: "hidden", clipPath: "inset(50%)" }}>{label}</h2>
     <iframe title={label} src={`parent-frame/frame.html?c=${encodeURIComponent(JSON.stringify(scenario))}`} style={{ display: "block", width: "100%", height: "100vh", border: 0 }} />

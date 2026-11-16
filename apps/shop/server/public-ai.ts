@@ -59,7 +59,7 @@ export function publicAi({ env = process.env, fetch: fetchImpl = globalThis.fetc
     if (Buffer.byteLength(mac) !== Buffer.byteLength(expected) || !timingSafeEqual(Buffer.from(mac), Buffer.from(expected))) return;
     try { const value = JSON.parse(Buffer.from(text, "base64url").toString()); return value.expires > now() && typeof value.sid === "string" ? value : undefined; } catch { return; }
   };
-  let backend = state, active = 0;
+  let backend = state, active = 0, liveActive = 0;
   const data = () => backend ||= firestoreAiState();
   const body = async (req: IncomingMessage, maximum = 512 * 1024) => {
     if (!/^application\/json(?:\s*;|$)/i.test(req.headers["content-type"] || "")) throw failure(415, tr("JSONで送信してください。"));
@@ -68,6 +68,25 @@ export function publicAi({ env = process.env, fetch: fetchImpl = globalThis.fetc
     try { return JSON.parse(Buffer.concat(chunks).toString()); } catch { throw failure(400, tr("メッセージの形式を確認してください。")); }
   };
   return {
+    async authorizeLive(req: IncomingMessage, token: string, allowedOrigins: string[]) {
+      const requestOrigin = String(req.headers.origin || "");
+      const session = verify(token);
+      if (!enabled || env.PUBLIC_AI_VOICE === "false" || !session || session.origin !== requestOrigin || !allowedOrigins.includes(requestOrigin)) throw failure(403, "Voice session refused");
+      if (liveActive >= 2) throw failure(429, "Voice sessions busy");
+      liveActive++;
+      let released = false;
+      const release = () => { if (!released) { released = true; liveActive--; } };
+      try {
+        const ip = env.PUBLIC_AI_TRUST_PROXY === "true" ? String(req.headers["x-forwarded-for"] || req.socket.remoteAddress).split(",").at(-1)!.trim() : req.socket.remoteAddress || "unknown";
+        const day = Math.floor(now() / 86400000), hour = Math.floor(now() / 3600000);
+        await data().charge([
+          { id: hash(`live:global:${day}`), limit: limit("PUBLIC_AI_LIVE_DAILY_LIMIT", 60), expiresAt: new Date((day + 2) * 86400000) },
+          { id: hash(`live:ip:${day}:${ip}:${secret}`), limit: limit("PUBLIC_AI_LIVE_IP_DAILY_LIMIT", 10), expiresAt: new Date((day + 2) * 86400000) },
+          { id: hash(`live:session:${hour}:${session.sid}`), limit: 4, expiresAt: new Date((hour + 2) * 3600000) },
+        ]);
+        return release;
+      } catch (error) { release(); throw error; }
+    },
     async handle(req: IncomingMessage, res: ServerResponse, allowedOrigins: string[]): Promise<boolean> {
       const path = (req.url || "").split("?")[0]; if (!path.startsWith("/api/ai/")) return false;
       const json = (status: number, value: RecordValue) => { res.writeHead(status, { "Content-Type": "application/json; charset=utf-8", "Cache-Control": "no-store" }); res.end(JSON.stringify(value)); };
@@ -75,7 +94,7 @@ export function publicAi({ env = process.env, fetch: fetchImpl = globalThis.fetc
       let phase = "request";
       try {
         if (requestOrigin && !allowedOrigins.includes(requestOrigin)) throw failure(403, tr("このサイトからAIを利用してください。"));
-        if (path === "/api/ai/config" && req.method === "GET") { json(200, { managed: enabled, defaultMode: enabled ? "managed" : "byok", model: enabled ? model : "", reasoning, router: "/api/ai/v1", byok: true }); return true; }
+        if (path === "/api/ai/config" && req.method === "GET") { json(200, { managed: enabled, defaultMode: enabled ? "managed" : "byok", model: enabled ? model : "", reasoning, router: "/api/ai/v1", byok: true, voice: enabled && env.PUBLIC_AI_VOICE !== "false" }); return true; }
         if (!enabled) throw failure(503, tr("運営側のGeminiは現在利用できません。AIの設定からご自身のAPIキーも使えます。"));
         const ip = env.PUBLIC_AI_TRUST_PROXY === "true" ? String(req.headers["x-forwarded-for"] || req.socket.remoteAddress).split(",").at(-1)!.trim() : req.socket.remoteAddress || "unknown";
         const hour = Math.floor(now() / 3600000), day = Math.floor(now() / 86400000);

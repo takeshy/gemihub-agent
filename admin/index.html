@@ -32,6 +32,24 @@
     </section>
     <p id="mode" class="note"></p>
     <div id="message" role="status" aria-live="polite" hidden></div>
+    <section id="chat-documents" class="panel" hidden aria-labelledby="documents-heading">
+      <div class="section-header"><h2 id="documents-heading">チャットの資料</h2><button id="documents-refresh" class="secondary" type="button">一覧を読み直す</button></div>
+      <p>地域のお知らせ、施設の利用案内、イベントなど、お店以外の情報もチャットで回答できます。</p>
+      <p class="note">テキスト・Markdown・CSV・JSON（UTF-8）・PDF、1ファイル5MB・本文10万文字まで。PDFは運営のGeminiに送って読み取ります。公開前に内容を確認・修正できます。</p>
+      <form id="document-upload" class="url-row">
+        <label for="document-file">資料ファイル<input id="document-file" type="file" accept=".txt,.md,.markdown,.csv,.json,.pdf" required></label>
+        <button type="submit">本文を読み込む</button>
+      </form>
+      <p id="documents-status" role="status" aria-live="polite"></p>
+      <form id="document-preview" hidden>
+        <label for="document-name">資料名<input id="document-name" maxlength="255" required></label>
+        <label for="document-text">回答に使う本文<textarea id="document-text" rows="12" maxlength="100000" required></textarea></label>
+        <p class="note">「公開する」を押すと、資料名と本文が誰でも読めるようになり、回答に必要な部分が利用者のAIに送られます。個人情報や非公開の内容が含まれていないか確認してください。PDFの読み取り結果は日付や表の数値も確認してください。</p>
+        <div class="document-actions"><button type="submit" value="publish">公開する</button><button type="submit" value="draft" class="secondary">下書きを保存</button><button id="document-cancel" type="button" class="secondary">閉じる</button></div>
+      </form>
+      <p id="documents-empty" class="note">資料はまだありません。</p>
+      <ul id="documents-list"></ul>
+    </section>
     <section id="registry" aria-labelledby="registry-heading" class="panel" hidden>
       <div class="section-header"><h2 id="registry-heading">お店一覧</h2><button id="add-shop" type="button">＋ 店を追加</button></div>
       <p class="note mobile-note">表は横にスクロールできます。</p>

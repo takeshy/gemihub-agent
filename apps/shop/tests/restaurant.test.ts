@@ -386,7 +386,7 @@ test("the public bundle is built by the official script and served with the head
   const worker = await get(`${base}/runtime/sandbox-worker.js`);
   assert.equal(worker.headers.get("content-security-policy"), "default-src 'none'; script-src blob:; connect-src 'none'; worker-src 'none'");
   assert.equal((await get(`${base}/runtime/index.js`)).status, 200);
-  for (const file of ["site.js", "ai-setup.js", "reservation-actions.js", "reserve-page.js", "review-dialog.js", "llm-relay.js", "llm-relay-sw.js", "assistant.css"]) assert.equal((await get(`${base}/${file}`)).status, 200, file);
+  for (const file of ["site.js", "ai-setup.js", "reservation-actions.js", "reserve-page.js", "review-dialog.js", "llm-relay.js", "llm-relay-sw.js", "voice-bridge.js", "voice-turn.js", "assistant.css"]) assert.equal((await get(`${base}/${file}`)).status, 200, file);
   const relayWorker = await get(`${base}/llm-relay-sw.js`);
   assert.equal(relayWorker.headers.get("service-worker-allowed"), "/s/akari/");
   assert.equal(relayWorker.headers.get("access-control-allow-origin"), null);

@@ -24,3 +24,7 @@ admin/site-editor.json
 admin/site-editor.json.*.tmp
 
 admin/site-images/
+admin/chat-documents.json
+admin/chat-documents.json.*.tmp
+site/chat-documents.json
+site/chat-documents.json.*.tmp

@@ -11,7 +11,8 @@ export async function initializeParent({ root = process.env.PARENT_ROOT, codeRoo
   catch (error) { if (error.code !== "ENOENT") throw error; await writeFile(join(root, "site/shops.json"), JSON.stringify({ version: 1, shops: [] }) + "\n", { flag: "wx" }); }
   // Refresh static assets on each release, preserving the operator-managed registry.
   const registry = join(codeRoot, "site/shops.json");
-  await cp(join(codeRoot, "site"), join(root, "site"), { recursive: true, filter: source => source !== registry });
+  const documents = join(codeRoot, "site/chat-documents.json");
+  await cp(join(codeRoot, "site"), join(root, "site"), { recursive: true, filter: source => source !== registry && source !== documents });
   for (const name of ["src", "vendor"]) {
     try { await symlink(join(codeRoot, name), join(root, name), "dir"); }
     catch (error) { if (error.code !== "EEXIST") throw error; }

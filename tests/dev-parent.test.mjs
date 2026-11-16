@@ -15,9 +15,14 @@ test("dev starts without local demo shops and redeploys preserve its registry an
   await writeFile(join(root, "site/shops.json"), config);
   await mkdir(join(root, "admin"));
   await writeFile(join(root, "admin/auth.json"), "private-fixture-state");
+  const documents = JSON.stringify({ version: 1, documents: [{ id: "local", name: "地域.txt", text: "公開済み資料" }] });
+  await writeFile(join(root, "site/chat-documents.json"), documents);
+  await writeFile(join(root, "admin/chat-documents.json"), "private-document-state");
   await initializeParent({ root });
   assert.equal(await readFile(join(root, "site/shops.json"), "utf8"), config);
   assert.equal(await readFile(join(root, "admin/auth.json"), "utf8"), "private-fixture-state");
+  assert.equal(await readFile(join(root, "site/chat-documents.json"), "utf8"), documents);
+  assert.equal(await readFile(join(root, "admin/chat-documents.json"), "utf8"), "private-document-state");
   const registry = await readFile(join(root, "site/shop-registry.js"), "utf8");
   assert.match(registry, /stationery\.example/);
   assert.doesNotMatch(registry, /127\.0\.0\.1|localhost/);

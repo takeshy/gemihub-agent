@@ -10,6 +10,7 @@ import { createSiteEditor } from "./site-editor-store.mjs";
 import { createSiteDesignGenerator } from "./site-editor-ai.mjs";
 import { createSiteImages } from "./site-images.mjs";
 import { createSiteCapture } from "./site-capture.mjs";
+import { createChatDocuments, createDocumentImporter } from "./chat-documents.mjs";
 
 async function body(req, limit = 1024 * 1024) {
   if (!/^application\/json(?:\s*;|$)/i.test(req.headers["content-type"] || "")) {
@@ -31,6 +32,8 @@ export function createAdminServer({ root = process.env.PARENT_ROOT || fileURLToP
   if (external && (external.protocol !== "https:" || external.origin !== publicOrigin)) throw new Error("公開管理画面のURLはHTTPSのオリジンを指定してください");
   const siteEditor = createSiteEditor({ root, configured: !!geminiApiKey, generate: createSiteDesignGenerator({ apiKey: geminiApiKey, fetch: fetchImpl }) });
   const siteImages = createSiteImages({ root });
+  const chatDocuments = createChatDocuments({ root });
+  const importDocument = createDocumentImporter({ apiKey: geminiApiKey, fetch: fetchImpl });
   const publicPage = new URL(process.env.AGENT_PARENT_URL || "http://localhost:8090");
   if (publicPage.username || publicPage.password || (publicPage.protocol !== "https:" && !(publicPage.protocol === "http:" && ["localhost", "127.0.0.1", "[::1]"].includes(publicPage.hostname)))) throw new Error("お店さがしの公開URLを確認してください");
   return createServer(async (req, res) => {
@@ -68,6 +71,11 @@ export function createAdminServer({ root = process.env.PARENT_ROOT || fileURLToP
       if (req.method === "GET" && url.pathname === "/api/session") return send(200, auth ? auth.status(user) : { user, configured: true });
       if (req.method === "POST" && url.pathname === "/api/logout") { if (auth) await auth.logout(req, res, origin); return send(200, { ok: true }); }
       if (url.pathname.startsWith("/api/") && !user) return send(401, { error: "運営者としてGoogleにログインしてください" });
+      if (req.method === "GET" && url.pathname === "/api/chat-documents") return send(200, await chatDocuments.get());
+      if (req.method === "POST" && url.pathname === "/api/chat-documents/import") return send(200, await importDocument(await body(req, 8 * 1024 * 1024)));
+      if (req.method === "PUT" && url.pathname === "/api/chat-documents") return send(200, await chatDocuments.save(await body(req)));
+      const documentMatch = url.pathname.match(/^\/api\/chat-documents\/([a-f0-9-]{36})$/);
+      if (req.method === "DELETE" && documentMatch) return send(200, await chatDocuments.delete(documentMatch[1], req.headers["if-match"]));
       if (req.method === "GET" && url.pathname === "/api/site/images") return send(200, await siteImages.list());
       const imageMatch = url.pathname.match(/^\/api\/site\/images\/([a-f0-9]{64})$/);
       if (req.method === "GET" && imageMatch) return send(200, await siteImages.read(imageMatch[1]));
@@ -121,7 +129,7 @@ export function createAdminServer({ root = process.env.PARENT_ROOT || fileURLToP
       }
       const match = url.pathname.match(/^\/api\/shops\/([^/]+)$/);
       if (req.method === "DELETE" && match) return send(200, await store.delete(decodeURIComponent(match[1]), req.headers["if-match"]));
-      const assets = { "/page-editor": ["dist/index.html", "text/html"], "/editor.js": ["dist/editor.js", "text/javascript"], "/editor.css": ["dist/editor.css", "text/css"], "/": ["index.html", "text/html"], "/index.html": ["index.html", "text/html"], "/admin.js": ["admin.js", "text/javascript"], "/site-editor.js": ["site-editor.js", "text/javascript"], "/admin.css": ["admin.css", "text/css"], "/shop-data.js": ["../site/shop-data.js", "text/javascript"] };
+      const assets = { "/chat-documents-ui.js": ["chat-documents-ui.js", "text/javascript"], "/page-editor": ["dist/index.html", "text/html"], "/editor.js": ["dist/editor.js", "text/javascript"], "/editor.css": ["dist/editor.css", "text/css"], "/": ["index.html", "text/html"], "/index.html": ["index.html", "text/html"], "/admin.js": ["admin.js", "text/javascript"], "/site-editor.js": ["site-editor.js", "text/javascript"], "/admin.css": ["admin.css", "text/css"], "/shop-data.js": ["../site/shop-data.js", "text/javascript"] };
       if (["GET", "HEAD"].includes(req.method) && Object.hasOwn(assets, url.pathname)) {
         const [file, type] = assets[url.pathname];
         const data = await readFile(new URL(file, import.meta.url));

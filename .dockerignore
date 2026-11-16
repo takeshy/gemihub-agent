@@ -24,3 +24,7 @@ apps/shop/infra/*
 !apps/shop/infra/domain-controller.py
 
 admin/site-images/
+admin/chat-documents.json
+admin/chat-documents.json.*.tmp
+site/chat-documents.json
+site/chat-documents.json.*.tmp

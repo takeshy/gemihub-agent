@@ -9,6 +9,7 @@ import { ShopInquiries, installInquiryPolicy, reviewShopInquiries } from "./inqu
 import { ShopFrame } from "./shop-frame.js";
 import { LlmRelay } from "./llm-relay.js";
 import { aiConnection, mountAiConnection } from "./ai-connection.js";
+import { GuideVoice } from "./voice-chat.js";
 
 /**
  * Boots the browser runtime in the page's assistant section.
@@ -26,7 +27,7 @@ export class AssistantMount {
     const english = document.documentElement.lang === "en";
     const reset = document.getElementById("ns-newchat");
     const input = document.getElementById("ns-input");
-    input.placeholder = english ? "Describe the shop you want…" : "行きたいお店の希望を相談…";
+    input.placeholder = english ? "Ask about shops or local information…" : "お店や地域の情報を相談…";
     input.setAttribute("aria-label", english ? "Message to the AI" : "AIへのメッセージ");
     document.getElementById("ns-send").textContent = english ? "Send" : "送信";
     const menu = document.createElement("details");
@@ -116,6 +117,7 @@ export class AssistantMount {
       mountAiConnection(booted.engine, connection);
       // Last, so a shop named in the address opens once the AI setup is known.
       App.shopFrame.mount();
+      App.voice = new GuideVoice({ engine, shopFrame: App.shopFrame, shops: App.page.shops, config: connection?.config });
       return booted.engine;
     } catch (error) {
       // The page must keep working without the assistant.

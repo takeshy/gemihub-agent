@@ -64,6 +64,7 @@ import { resetShop } from "./shop-reset.ts";
 import { preserveDesignVersion, retireDesignVersions, pruneDesignVersions, nextDesignPublication, currentDesignPublication, restoreDesign, sameDesign, parseTargetKey, targetKey, versionsFor, targetLabel, indexedDesignVersions, hasCurrentDesignIndex, sameAsCurrent } from "./design-versions.ts";
 import { createInitialTheme, initialThemeConfig, initialIntroductionPages, initialThemePreview, type ThemeRun } from "./initial-theme.ts";
 import { publicAi, memoryAiState } from "./public-ai.ts";
+import { createPublicLiveUpgrade } from "./public-live.ts";
 import { lateReleaseMinutes } from "../shared/seating.ts";
 import { aggregateCustomers, customerSummaries, phoneCustomerSchema, phoneKey, ensurePhoneCustomer, savePhoneCustomer, customerFilterSchema, customerSince, customerImages, customerAttachmentSchema, normalizeEmail, type CustomerNote, type CustomerAttachment, type Inquiry, type CustomerRecord } from "./customers.ts";
 import { attachmentUnavailable, googleCustomerFiles, memoryCustomerFiles, readAttachment, type CustomerFiles } from "./customer-files.ts";
@@ -4541,6 +4542,7 @@ export function createApp(
       host: phoneHostFor(shop, shop.published, settings, caller, callSid, account && normalizeEmail(account.email)),
     };
   }, phoneConnector);
+  const publicLiveUpgrade = createPublicLiveUpgrade({ authorize: managedAi.authorizeLive, allowedOrigins: () => [origin(), ...(process.env.AGENT_PARENT_URL ? [new URL(process.env.AGENT_PARENT_URL).origin] : [])] });
   attachAssistantLive(server, async (req, shopId) => {
     const s = await session(store, req);
     const user = s?.user && isJudgeEmail(s.user.email) && !judgeActive() ? undefined : s?.user;
@@ -4548,7 +4550,7 @@ export function createApp(
     if (!user || !shop?.published || (shop.judge && !judgeActive()) || !(await operator(user, shop))) return undefined;
     if (user.judge) await chargeJudge(user.email);
     return { data: await shopData(shop) };
-  }, liveConnector, phoneUpgrade);
+  }, liveConnector, (req, socket, head) => publicLiveUpgrade(req, socket, head) || phoneUpgrade(req, socket, head));
   let stopped = false;
   const timer = setInterval(() => {
     void (async () => {

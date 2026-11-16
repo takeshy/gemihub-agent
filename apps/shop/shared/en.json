@@ -4551,5 +4551,11 @@
   "自分のAPIキーを使う": "Using your own API key",
   "ページ編集": "Page editor",
   "公開中の内容": "Published page",
-  "変更案の履歴": "Proposal history"
+  "変更案の履歴": "Proposal history",
+  "チャットの資料・資料なし": "Chat documents - no documents",
+  "チャットの資料・公開中と下書き": "Chat documents - published and draft",
+  "チャットの資料・本文を確認して公開": "Chat documents - review and publish",
+  "公開資料から地域の情報を回答": "Answer local questions from published documents",
+  "地域の案内を音声で相談": "Ask the local guide by voice",
+  "話し相手を店舗に切り替える": "Switch the voice conversation to a shop"
 }

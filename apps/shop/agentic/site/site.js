@@ -5,6 +5,7 @@ import { App } from "./reserve-page.js";
 import { openReviewDialog } from "./review-dialog.js";
 import { RelayClient } from "./llm-relay.js";
 import { aiConnection, mountAiConnection } from "./ai-connection.js";
+import { mountShopVoiceBridge } from "./voice-bridge.js";
 
 const WORDS = {
   ja: {
@@ -163,6 +164,7 @@ export class AssistantMount {
   static async start() {
     if (!App.page) return null;
     AssistantMount.mountPanel();
+    if (App.embedded()) mountShopVoiceBridge(() => AssistantMount.startAssistant(), App.page.slug);
     if (!App.embedded()) return AssistantMount.startAssistant();
   }
 

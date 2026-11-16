@@ -5,7 +5,7 @@
       "name": "reservation_finder",
       "front_man": "finder_front",
       "hocon": "./reservation_finder.network.json",
-      "description": "雑貨店などのお店紹介から、飲食店の予約相談まで。ジャンルや場所でお店を見つけ、店舗サイトをご案内します。",
+      "description": "雑貨店などのお店紹介から、飲食店の予約相談まで。ジャンルや場所でお店を見つけ、店舗サイトをご案内します。運営が公開した資料をもとに、地域のお知らせや施設・イベントの情報も案内します。",
       "tags": [
         "agentified-website",
         "restaurant-reservation",
@@ -13,6 +13,7 @@
       ],
       "sample_queries": [
         "新宿で贈り物が見つかる雑貨店を教えて",
+        "図書館の開館時間を教えて",
         "今夜19時に2人、席だけ空いている店は？",
         "12月18日19時から12人、1人5000円以内のコースで探して",
         "えびが食べられない人がいる。対応できる店は？",
@@ -82,7 +83,8 @@
       "show_candidates",
       "open_shop",
       "open_shop_page",
-      "show_shop_introductions"
+      "show_shop_introductions",
+      "search_chat_documents"
     ]
   }
 }

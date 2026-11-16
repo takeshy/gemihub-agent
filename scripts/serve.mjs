@@ -3,6 +3,7 @@ import { spawn } from "node:child_process";
 import { createServer, request } from "node:http";
 import { fileURLToPath } from "node:url";
 import { publicAi, memoryAiState } from "../apps/shop/server/public-ai.ts";
+import { createPublicLiveUpgrade } from "../apps/shop/server/public-live.ts";
 
 const args = process.argv.slice(2);
 let port = 8090;
@@ -36,5 +37,11 @@ try {
     res.once("close", () => proxy.destroy()); req.pipe(proxy);
   });
   server.on("error", error => { console.error(error.message); stop(1); });
+  const liveUpgrade = createPublicLiveUpgrade({ authorize: ai.authorizeLive, allowedOrigins: () => [`http://localhost:${port}`, `http://127.0.0.1:${port}`] });
+  // Only the voice relay accepts upgrades, from this server's own hosts. Close anything else instead of leaving it open.
+  server.on("upgrade", (req, socket, head) => {
+    if ([`localhost:${port}`, `127.0.0.1:${port}`].includes(req.headers.host) && liveUpgrade(req, socket, head)) return;
+    socket.destroy();
+  });
   server.listen(port, "127.0.0.1", () => console.log(`Open http://localhost:${port}/`));
 } catch (error) { console.error(error.message); stop(1); }

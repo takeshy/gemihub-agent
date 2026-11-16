@@ -12,9 +12,10 @@ export async function initializeParent({ root = process.env.PARENT_ROOT, codeRoo
   // Refresh static assets on each release, preserving the operator-managed registry.
   const registry = join(codeRoot, "site/shops.json");
   const documents = join(codeRoot, "site/chat-documents.json");
-  await cp(join(codeRoot, "site"), join(root, "site"), { recursive: true, filter: source => source !== registry && source !== documents });
+  const documentFiles = join(codeRoot, "site/chat-document-files");
+  await cp(join(codeRoot, "site"), join(root, "site"), { recursive: true, filter: source => source !== registry && source !== documents && source !== documentFiles });
   for (const name of ["src", "vendor"]) {
-    try { await symlink(join(codeRoot, name), join(root, name), "dir"); }
+    try { await symlink(join(codeRoot, name), join(root, name), process.platform === "win32" ? "junction" : "dir"); }
     catch (error) { if (error.code !== "EEXIST") throw error; }
   }
   await buildSite({ root: pathToFileURL(root + "/"), production: true, stdio: "pipe" });

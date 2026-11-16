@@ -11,11 +11,14 @@ import { createAdminServer } from "../admin/server.mjs";
 const listen = async server => { await new Promise(resolve => server.listen(0, "127.0.0.1", resolve)); return `http://127.0.0.1:${server.address().port}`; };
 const close = async server => { server.closeAllConnections(); await new Promise(resolve => server.close(resolve)); };
 const root = await mkdtemp(join(tmpdir(), "finder-documents-browser-"));
+const extracted = "中央図書館の開館時間は午前9時から午後6時です。休館日は毎週月曜日です。";
+const pdf = Buffer.from("%PDF-1.7 fixture");
 let browser, admin, publicServer;
 const errors = [], calls = [];
 try {
   await initializeParent({ root });
-  admin = createAdminServer({ root, auth: false, geminiApiKey: "" });
+  admin = createAdminServer({ root, auth: false, geminiApiKey: "fixture-key", fetch: async () =>
+    Response.json({ candidates: [{ finishReason: "STOP", content: { parts: [{ text: extracted }] } }] }) });
   const adminUrl = await listen(admin);
   publicServer = createServer(async (req, res) => {
     try {
@@ -29,7 +32,7 @@ try {
       if (file !== site && !file.startsWith(site + sep)) throw new Error("outside");
       if ((await stat(file)).isDirectory()) file = join(file, "index.html");
       const data = await readFile(file);
-      res.writeHead(200, { "Content-Type": /\.m?js$/.test(file) ? "text/javascript" : file.endsWith(".css") ? "text/css" : file.endsWith(".json") ? "application/json" : "text/html; charset=utf-8", "Cache-Control": "no-store" });
+      res.writeHead(200, { "Content-Type": /\.m?js$/.test(file) ? "text/javascript" : file.endsWith(".css") ? "text/css" : file.endsWith(".json") ? "application/json" : file.endsWith(".pdf") ? "application/pdf" : "text/html; charset=utf-8", "Cache-Control": "no-store" });
       res.end(data);
     } catch { res.writeHead(404); res.end(); }
   });
@@ -41,7 +44,10 @@ try {
     const page = await context.newPage(); page.on("pageerror", error => errors.push(error.message));
     await page.goto(adminUrl);
     await expect(page.locator("#chat-documents")).toBeVisible();
-    await page.locator("#document-file").setInputFiles({ name: `施設案内-${width}.md`, mimeType: "text/markdown", buffer: Buffer.from("中央図書館の開館時間は午前9時から午後6時です。休館日は毎週月曜日です。\n<script>alert('data only')</script>") });
+    const isPdf = width === 1280;
+    const filename = `施設案内-${width}.${isPdf ? "pdf" : "md"}`;
+    await page.locator("#document-file").setInputFiles(isPdf ? { name: filename, mimeType: "application/pdf", buffer: pdf }
+      : { name: filename, mimeType: "text/markdown", buffer: Buffer.from(extracted + "\n<script>alert('data only')</script>") });
     await page.getByRole("button", { name: "本文を読み込む", exact: true }).click();
     await expect(page.locator("#document-preview")).toBeVisible();
     await expect(page.locator("#document-text")).toHaveValue(/午前9時/);
@@ -61,7 +67,8 @@ try {
         const receipt = JSON.parse(receipts.at(-1).content);
         assert.equal(receipt.status, "succeeded"); assert.equal(receipt.result.ok, true);
         const match = receipt.result.results[0];
-        delta = { content: match ? `${match.text}\n資料: ${match.source}` : "公開資料から確認できませんでした。" };
+        const link = match?.pdfUrl ? `\n[PDFを開く](${match.pdfUrl})` : "";
+        delta = { content: match ? `${match.text}\n資料: ${match.source}${link}` : "公開資料から確認できませんでした。" };
       }
       const chunk = { model: "fixture-model", choices: [{ index: 0, delta, finish_reason: delta.tool_calls ? "tool_calls" : "stop" }] };
       await route.fulfill({ contentType: "text/event-stream", body: `data: ${JSON.stringify(chunk)}\n\ndata: [DONE]\n\n` });
@@ -82,13 +89,26 @@ try {
     await page.getByRole("button", { name: "公開する", exact: true }).click();
     await expect(page.locator("#documents-status")).toContainText("公開しました");
     const answer = await ask();
-    await expect(answer).toContainText("午前10時"); await expect(answer).toContainText(`資料: 施設案内-${width}.md`);
+    await expect(answer).toContainText("午前10時"); await expect(answer).toContainText(`資料: ${filename}`);
+    let pdfUrl;
+    if (isPdf) {
+      const link = answer.getByRole("link", { name: "PDFを開く" });
+      pdfUrl = await link.getAttribute("href");
+      assert.deepEqual(Buffer.from(await (await fetch(pdfUrl)).arrayBuffer()), pdf);
+      await link.click();
+      const preview = visitor.getByRole("dialog", { name: "案内資料（PDF）" });
+      await expect(preview).toBeVisible();
+      await expect(preview.locator("iframe")).toHaveAttribute("src", pdfUrl);
+      await preview.getByRole("button", { name: "閉じる", exact: true }).click();
+      await expect(link).toBeFocused();
+    }
     await expect(visitor.locator(".shop-introduction, .finder-results")).toHaveCount(0);
     for (const current of [page, visitor]) assert.equal(await current.evaluate(() => document.documentElement.scrollWidth > innerWidth), false);
     await page.screenshot({ path: `test-results/chat-documents/admin-${width}.png`, fullPage: true });
     await visitor.screenshot({ path: `test-results/chat-documents/chat-${width}.png`, fullPage: true });
     await page.getByRole("button", { name: "公開をやめる", exact: true }).click();
     await expect(page.locator("#documents-status")).toContainText("公開をやめました");
+    if (pdfUrl) assert.equal((await fetch(pdfUrl)).status, 404);
     await expect(await ask()).toContainText("確認できませんでした");
     page.once("dialog", dialog => dialog.accept());
     await page.locator("#documents-list").getByRole("button", { name: "削除", exact: true }).click();

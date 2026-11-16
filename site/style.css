@@ -614,3 +614,35 @@ body[data-shop-view="open"] #shop-page-status[data-state="loaded"] ~ .shop-page-
 .shop-address { font-size:.85rem; }
 .shop-card[hidden], .shop-directory-map [hidden] { display:none!important; }
 @media(max-width:600px) { .shop-directory-map { padding:16px; } .shop-directory-map iframe { height:280px; } .shop-directory-tools label { width:100%; } }
+.document-pdf-preview {
+  width: min(1100px, 96vw);
+  height: 90dvh;
+  max-width: none;
+  max-height: none;
+  padding: 0;
+  border: 1px solid #d6ded8;
+  border-radius: 14px;
+  color: #234338;
+  background: #fff;
+  box-shadow: 0 18px 52px #162a2440;
+}
+.document-pdf-preview[open] { display: flex; flex-direction: column; }
+.document-pdf-preview::backdrop { background: #14282099; }
+.document-pdf-preview > div {
+  display: flex;
+  align-items: center;
+  gap: .85rem;
+  padding: .65rem 1rem;
+  flex-wrap: wrap;
+}
+.document-pdf-preview h2 { margin: 0 auto 0 0; font-size: 1.1rem; }
+.document-pdf-preview a { color: inherit; }
+.document-pdf-preview iframe { flex: 1; width: 100%; min-height: 0; border: 0; }
+.ns-msg.bot a[href*="/chat-document-files/"] {
+  display: inline-block;
+  padding: .35rem .65rem;
+  border: 1px solid #a1b5a8;
+  border-radius: .5rem;
+  background: #f7fbf8;
+  font-weight: 650;
+}

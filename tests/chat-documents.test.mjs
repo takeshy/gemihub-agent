@@ -52,7 +52,7 @@ test("drafts stay private; publish, editing, unpublish, delete and restart prese
   let state = await store.get();
   state = await store.save({ ...draft, revision: state.revision });
   assert.deepEqual((await publicData()).documents, []);
-  assert.equal((await stat(join(root, "admin/chat-documents.json"))).mode & 0o777, 0o600);
+  if (process.platform !== "win32") assert.equal((await stat(join(root, "admin/chat-documents.json"))).mode & 0o777, 0o600);
   const id = state.documents[0].id;
   state = await store.save({ ...draft, id, published: true, revision: state.revision });
   const publicDocs = (await publicData()).documents;
@@ -71,6 +71,33 @@ test("drafts stay private; publish, editing, unpublish, delete and restart prese
   assert.deepEqual(state.documents, []);
 });
 
+test("an original PDF is readable only while published and is linked from its search result", async t => {
+  const { root, store, publicData } = await fixture(t);
+  const pdf = Buffer.from("%PDF-1.7 original fixture");
+  const doc = { ...draft, name: "図書館.pdf" };
+  let state = await store.get();
+  await assert.rejects(store.save({ ...doc, revision: state.revision, pdf: encode("invalid") }), { status: 400 });
+  state = await store.save({ ...doc, revision: state.revision, pdf: pdf.toString("base64") });
+  const { id, hasPdf } = state.documents[0];
+  assert.equal(hasPdf, true);
+  assert.equal("pdf" in state.documents[0], false);
+  const asset = join(root, "site/chat-document-files", id + ".pdf");
+  await assert.rejects(readFile(asset), { code: "ENOENT" });
+  assert.deepEqual((await publicData()).documents, []);
+  const reopened = createChatDocuments({ root });
+  state = await reopened.save({ ...doc, id, published: true, revision: state.revision });
+  assert.deepEqual(await readFile(asset), pdf);
+  const docs = (await publicData()).documents;
+  assert.equal("pdf" in docs[0], false);
+  assert.ok(searchDocuments(docs, "図書館").results[0].pdfUrl.endsWith("/chat-document-files/" + id + ".pdf"));
+  state = await reopened.save({ ...doc, id, revision: state.revision });
+  await assert.rejects(readFile(asset), { code: "ENOENT" });
+  state = await reopened.save({ ...doc, id, published: true, revision: state.revision });
+  assert.deepEqual(await readFile(asset), pdf);
+  await reopened.delete(id, state.revision);
+  await assert.rejects(readFile(asset), { code: "ENOENT" });
+});
+
 test("concurrent saves reject stale revisions and failed publication restores private and public state", async t => {
   const { root, store, publicData } = await fixture(t);
   const revision = (await store.get()).revision;
@@ -81,7 +108,7 @@ test("concurrent saves reject stale revisions and failed publication restores pr
   const broken = createChatDocuments({ root, write: async (path, bytes, options) => {
     const { atomicWrite } = await import("../admin/store.mjs");
     await atomicWrite(path, bytes, options);
-    if (path.includes("/site/")) throw new Error("disk failure");
+    if (path === join(root, "site/chat-documents.json")) throw new Error("disk failure");
   } });
   await assert.rejects(broken.save({ ...draft, id: before.documents[0].id, published: true, revision: before.revision }), /disk failure/);
   assert.deepEqual(await store.get(), before);

@@ -17,3 +17,4 @@ admin/chat-documents.json
 admin/chat-documents.json.*.tmp
 site/chat-documents.json
 site/chat-documents.json.*.tmp
+site/chat-document-files/

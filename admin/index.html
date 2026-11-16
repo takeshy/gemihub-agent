@@ -44,6 +44,7 @@
       <form id="document-preview" hidden>
         <label for="document-name">資料名<input id="document-name" maxlength="255" required></label>
         <label for="document-text">回答に使う本文<textarea id="document-text" rows="12" maxlength="100000" required></textarea></label>
+        <p id="document-pdf-note" class="note" hidden>公開すると元のPDFも公開され、案内AIの回答から開けます。公開前にPDF全体の内容を確認してください。</p>
         <p class="note">「公開する」を押すと、資料名と本文が誰でも読めるようになり、回答に必要な部分が利用者のAIに送られます。個人情報や非公開の内容が含まれていないか確認してください。PDFの読み取り結果は日付や表の数値も確認してください。</p>
         <div class="document-actions"><button type="submit" value="publish">公開する</button><button type="submit" value="draft" class="secondary">下書きを保存</button><button id="document-cancel" type="button" class="secondary">閉じる</button></div>
       </form>

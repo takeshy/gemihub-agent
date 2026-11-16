@@ -14,6 +14,17 @@ function resetStateOnLanguageChange(locale: string) {
     localStorage.setItem(localeMarker, locale);
   } catch { /* Storage can be unavailable; stories still render from fresh fixtures. */ }
 }
+// Every scenario uses the same shop ID, so an editor draft saved by one story (for example an
+// owner-only shop) would be loaded by the next story, whose shop it does not fit. Drop drafts
+// when the story changes; reloading the same story keeps its draft.
+const storyMarker = "gemihub:storybook-story";
+function resetDraftsOnStoryChange(story: string) {
+  try {
+    if (localStorage.getItem(storyMarker) === story) return;
+    for (const key of Object.keys(localStorage)) if (key.startsWith("gemihub:local-preview:")) localStorage.removeItem(key);
+    localStorage.setItem(storyMarker, story);
+  } catch { /* Storage can be unavailable; stories still render from fresh fixtures. */ }
+}
 const preview: Preview = {
   initialGlobals: { locale: "ja" },
   // Runs before story loaders, which build fixtures with tr(): set the language first.
@@ -21,6 +32,7 @@ const preview: Preview = {
     const locale = storyLocale(context.globals);
     setLocaleResolver(() => locale);
     resetStateOnLanguageChange(locale);
+    resetDraftsOnStoryChange(context.id);
     return {};
   }],
   globalTypes: {

@@ -29,6 +29,7 @@
     "start": "node --env-file-if-exists=.env --import tsx scripts/serve.mjs",
     "start:shop": "npm run start --workspace @gemihub/shop",
     "dev:shop": "npm run dev --workspace @gemihub/shop",
+    "storybook": "npm run storybook --workspace @gemihub/shop",
     "dev:demo": "node --env-file-if-exists=.env scripts/dev-demo.mjs",
     "test": "npm run test:finder && npm run test:shop",
     "test:finder": "node --test \"tests/*.test.mjs\"",

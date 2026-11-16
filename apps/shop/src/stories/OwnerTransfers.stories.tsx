@@ -1,9 +1,13 @@
 import React from "react";
 import type { Meta, StoryObj } from "@storybook/react-vite";
 import { Screen } from "./Screen";
+import { within, userEvent } from "storybook/test";
+import { tr } from "../../shared/i18n";
 
 const meta = {
   title: "運営/予約・お客様/キャンセル枠の予約",
+  // The booking list opens on today's date, and these sample bookings are on later days.
+  play: async ({ canvasElement }) => { await userEvent.click(await within(canvasElement).findByRole("button", { name: tr("絞り込みを解除") })); },
   component: Screen,
   parameters: { layout: "fullscreen" },
   render: args => <Screen key={args.scenario} {...args} />,

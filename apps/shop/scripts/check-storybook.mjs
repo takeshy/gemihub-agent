@@ -10,7 +10,7 @@ const server = createServer(async (req, res) => {
   try {
     const path = resolve(root, `.${new URL(req.url, "http://localhost").pathname}`);
     assert.ok(path.startsWith(`${root}/`));
-    res.setHeader("Content-Type", ({ ".html": "text/html", ".js": "application/javascript", ".css": "text/css", ".json": "application/json" })[extname(path)] || "application/octet-stream");
+    res.setHeader("Content-Type", ({ ".html": "text/html", ".js": "application/javascript", ".mjs": "application/javascript", ".css": "text/css", ".json": "application/json" })[extname(path)] || "application/octet-stream");
     res.end(await readFile(path));
   } catch { res.writeHead(404); res.end(); }
 });

@@ -4537,5 +4537,19 @@
   "Geminiに接続できませんでした。少し待ってからお試しください。": "Could not connect to Gemini. Wait a little and try again.",
   "AIの応答を取得できませんでした。少し待ってからお試しください。": "Could not get an AI response. Wait a little and try again.",
   "10MB以内のPNG・JPEG・GIF・WebP画像を選んでください。": "Choose a PNG, JPEG, GIF or WebP image up to 10 MB.",
-  "PNG・JPEG・GIF・WebP、1枚10MBまで。お客様メモの添付はこの一覧には表示しません。": "PNG, JPEG, GIF or WebP, up to 10 MB each. Attachments from customer notes are not shown here."
+  "PNG・JPEG・GIF・WebP、1枚10MBまで。お客様メモの添付はこの一覧には表示しません。": "PNG, JPEG, GIF or WebP, up to 10 MB each. Attachments from customer notes are not shown here.",
+  "お店さがしの運営": "Finder management",
+  "管理画面": "Administration",
+  "ログイン前": "Signed out",
+  "ログイン未設定": "Sign-in not configured",
+  "登録店なし": "No registered shops",
+  "登録店あり": "Registered shops",
+  "店を追加": "Add a shop",
+  "お店さがし": "Shop finder",
+  "トップページ": "Home page",
+  "地図でお店を確認": "Shops on the map",
+  "自分のAPIキーを使う": "Using your own API key",
+  "ページ編集": "Page editor",
+  "公開中の内容": "Published page",
+  "変更案の履歴": "Proposal history"
 }

@@ -90,7 +90,7 @@ try {
       if (kind === 'one-staff-trend') {
         await expect(canvas.locator('.staff-menu-table tbody tr')).toHaveCount(3);
         await expect(canvas.locator('.staff-menu-table')).toContainText(label('追加ケア'));
-        await expect(canvas.locator('.analytics-kpis')).toContainText('707,000');
+        await expect(canvas.locator('.analytics-kpis')).toContainText(language === 'en' ? '7,120.50' : '707,000');
         await canvas.getByRole('combobox', { name: label('表示単位') }).selectOption('month');
         await expect(canvas.getByRole('combobox', { name: label('表示するスタッフ') })).toHaveValue('haru');
         const previous = await canvas.locator('.analytics-kpis').textContent();

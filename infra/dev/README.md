@@ -10,7 +10,7 @@
 
 ## メモリと保存先
 
-ビルドはCloud Buildで行い、2GBのVMでは実行しない。アプリ全体のメモリ上限は1536MiB、HTTPS用Caddyは96MiB。OSなどに約400MiBを残す。Nodeのヒープ上限は親配信48MiB・管理192MiB・店舗512MiBで、上記のコンテナ上限にはChromiumなどのメモリも含む。画面撮影は店舗サーバー内で直列化する。2GBのswapは一時的な余裕であり、常用を前提にしない。
+ビルドはCloud Buildで行い、2GBのVMでは実行しない。親・管理・店舗アプリのメモリ上限は1280MiB、審査員用デモは256MiB、HTTPS用Caddyは96MiB。合計1632MiBで、OSなどに約400MiBを残す。Nodeのヒープ上限は親配信48MiB・管理192MiB・店舗512MiB・デモ160MiBで、上記のコンテナ上限にはChromiumなどのメモリも含む。画面撮影は店舗サーバー内で直列化する。2GBのswapは一時的な余裕であり、常用を前提にしない。
 
 少人数の開発・検証を想定した構成。多数の店舗が同時に画面生成を行う用途の容量を保証するものではない。稼働後にRSS・swap・OOMを確認し、必要なら4GBへ変更する。`e2-small` は2つの共有vCPU、継続利用できるCPU枠は合計0.5 vCPUなので、重い処理が続く場合はCPUも考慮する。[Google仕様](https://docs.cloud.google.com/compute/docs/general-purpose-machines#e2-shared-core)
 
@@ -61,7 +61,17 @@ gcloud compute ssh gemihub-dev --project=geminihub-486523 --zone=asia-northeast1
 
 3つのURLのHTTPS、未認証の管理API拒否、Googleログイン、招待メール、店主の再ログイン、保存とZIP出力を確認する。モデルやメールを使う実機検証はテスト用応答とは区別する。ランタイム設定や `docker inspect` の環境変数を出力しない。
 
-更新は新しいタグでCloud Buildを完了してから `app_image` を更新し、Terraform plan/apply後にVMの `sudo google_metadata_script_runner startup` を実行する。Caddyfileも変更した場合は、続けて `sudo docker exec gemihub-dev_caddy_1 caddy reload --config /etc/caddy/Caddyfile` で経路を反映する。ランナーは新しいイメージを取得し、親の登録店を保持したまま配信ファイルを作り直す。戻すときは直前のイメージタグを指定する。初期配備や更新時の構成全体の自動ロールバックは行わない。
+更新は新しいタグでCloud Buildを完了してから `app_image` を更新し、Terraform plan/apply後にVMの `sudo google_metadata_script_runner startup` を実行する。ランナーはCaddy設定を検証し、新しいイメージを取得して親の登録店を保持したまま配信ファイルを作り直す。デモの起動確認後にCaddyを自動リロードするので、手動で足した経路に依存しない。戻すときは直前の対応イメージタグを指定する。デモを含まない古いイメージではデモサービスを起動できない。初期配備や更新時の構成全体の自動ロールバックは行わない。
+
+## 審査員向けの4店舗
+
+`challenge-demo`は上記と同じビルド済みイメージの`infra/dev/challenge-demo.ts`を起動し、炉端 灯・トラットリア ソーレ・広東 龍・文具と器 こまどだけを配信する。サービスと経路はCompose・Caddyfileに定義し、両ファイルはTerraformのVMメタデータにも保存する。`up --remove-orphans`で消える手作業の追加は使わない。Num05など通常の店舗と、音声AI・資料・管理画面のAPIは引き続き`app`へ接続する。
+
+起動コード・テーマ・写真5点は、VMに残っていた旧イメージ`app@sha256:e3f86e63727da4148bfe795c354e1fbac2e8265f4a77237acbe44e3928288ec2`から回収した。新しいイメージでは現在の店舗アプリ・音声中継と組み合わせる。`DEMO_MODE=true`、`NODE_ENV=development`、公開Origin、親Origin、3010番ポートを明示し、秘密の環境ファイル・認証情報・本番DB・永続ボリューム・ホストの公開ポートは渡さない。ファイルは読み取り専用で、一時ファイルだけ専用tmpfsへ書く。
+
+元の起動コードどおりDBはメモリ内、メールは送信しない。デモ予約はコンテナの再作成で初期化される。4店舗の定義・写真・初期予約はソースから毎回再生成するので、以前のコンテナの環境変数や保存先を探して引き継ぐ必要はない。親の店舗一覧やチャット資料は別の永続領域に残る。`/healthz`の起動確認に失敗したデモへ新しいCaddyを起動しない。
+
+配備前の検証は`npm exec --workspace @gemihub/shop -- tsx --test tests/challenge-demo.test.ts`と`python3 -m unittest discover -s infra/dev/tests`。店舗のビルド済み`dist/`が必要で、店舗テストは`apps/shop`から実行する。配備後は4店舗のページ・写真・エージェントのマニフェスト・読み取り専用MCPに加え、通常店舗、親の音声設定、管理APIの未認証拒否を確認する。
 
 DNSやHTTPSの検証だけでは認証・メール・保存の動作確認にならない。Cloud Buildが成功しても、VM上の起動と公開URLの確認まで実施する。
 

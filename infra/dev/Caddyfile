@@ -14,5 +14,11 @@ admin.dev.gemihub.net {
     reverse_proxy app:8091
 }
 shop.dev.gemihub.net {
-    reverse_proxy app:3000
+    @challenge_demo path /s/akari /s/akari/* /s/trattoria-sole /s/trattoria-sole/* /s/kanton-ryu /s/kanton-ryu/* /s/komado /s/komado/* /api/public/akari /api/public/akari/* /api/public/trattoria-sole /api/public/trattoria-sole/* /api/public/kanton-ryu /api/public/kanton-ryu/*
+    handle @challenge_demo {
+        reverse_proxy challenge-demo:3010
+    }
+    handle {
+        reverse_proxy app:3000
+    }
 }

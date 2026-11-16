@@ -46,9 +46,12 @@ def main():
     runtime = {**os.environ, "APP_IMAGE": config["image"], "PROJECT_ID": config["project"], "VERTEX_MODEL": config["model"]}
     compose = ["docker-compose", "-p", "gemihub-dev", "-f", "/opt/gemihub-dev/compose.yaml"]
     subprocess.run(compose + ["pull"], env=runtime, check=True)
+    subprocess.run(compose + ["run", "--rm", "--no-deps", "caddy", "caddy", "validate", "--config", "/etc/caddy/Caddyfile"], env=runtime, check=True)
     subprocess.run(compose + ["stop", "app"], env=runtime, check=True)
     subprocess.run(compose + ["run", "--rm", "--no-deps", "app", "node", "infra/dev/init-parent.mjs"], env=runtime, check=True)
     subprocess.run(compose + ["up", "-d", "--remove-orphans"], env=runtime, check=True)
+    # The Caddy container often survives an update; changing the mounted file alone does not reload it.
+    subprocess.run(compose + ["exec", "-T", "caddy", "caddy", "reload", "--config", "/etc/caddy/Caddyfile"], env=runtime, check=True)
 
 
 if __name__ == "__main__":

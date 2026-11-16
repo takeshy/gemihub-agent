@@ -11,7 +11,7 @@ services:
   app:
     <<: *app
     command: [node, infra/dev/start.mjs]
-    mem_limit: 1536m
+    mem_limit: 1280m
     stop_grace_period: 90s
     env_file: [/etc/gemihub-dev/secrets.env]
     environment:
@@ -37,10 +37,39 @@ services:
       PARENT_MAIL_URL: http://127.0.0.1:8091/api/internal/mail
     volumes:
       - /var/lib/gemihub-dev/parent:/data/parent
+  challenge-demo:
+    <<: *app
+    working_dir: /app/apps/shop
+    command: [node, --max-old-space-size=160, --import, tsx, /app/infra/dev/challenge-demo.ts]
+    mem_limit: 256m
+    stop_grace_period: 30s
+    user: node
+    read_only: true
+    tmpfs:
+      - /tmp:size=96m,mode=1777
+    cap_drop: [ALL]
+    security_opt: [no-new-privileges:true]
+    # Deliberately no secrets.env, persistent volume or published port. All reservations are samples.
+    environment:
+      NODE_ENV: development
+      DEMO_MODE: 'true'
+      APP_ORIGIN: https://shop.dev.gemihub.net
+      AGENT_PARENT_URL: https://dev.gemihub.net
+      PORT: '3010'
+      HOME: /tmp
+    healthcheck:
+      test: [CMD, node, --max-old-space-size=32, -e, "fetch('http://127.0.0.1:3010/healthz').then(r=>process.exit(r.ok?0:1)).catch(()=>process.exit(1))"]
+      interval: 10s
+      timeout: 5s
+      retries: 6
+      start_period: 10s
   caddy:
     image: caddy:2.11.9-alpine
     restart: unless-stopped
     mem_limit: 96m
+    depends_on:
+      app: {condition: service_started}
+      challenge-demo: {condition: service_healthy}
     ports: ['80:80', '443:443']
     volumes:
       - /opt/gemihub-dev/Caddyfile:/etc/caddy/Caddyfile:ro

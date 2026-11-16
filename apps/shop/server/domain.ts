@@ -22,6 +22,8 @@ export const shopSchema = z
     /** Restaurants may publish an information-only site. Absent keeps existing booking behavior. */
     reservationsEnabled: z.boolean().optional(),
     description: z.string().max(1500),
+    /** Other-industry shops: published goods, independent of reservable menu entries. */
+    products: z.array(z.string().trim().min(1).max(100)).max(50).optional(),
     address: z.string().max(300),
     appearance: z.object({
       accent: z.enum(["sage", "rose", "navy"]),
@@ -455,6 +457,6 @@ export function planSummary(before: ShopConfig | null, next: ShopConfig) {
     .filter((k) => stableJson(before[k]) !== stableJson(next[k]))
     .map(
       (k) =>
-        tr("{0}を更新", { name: tr("店名"), industry: tr("業種"), reservationsEnabled: tr("予約受付"), description: tr("お店の紹介"), address: tr("アクセス"), appearance: tr("ページの色・画像・配置"), notificationEmail: tr("通知先"), map: tr("地図"), screens: tr("画面のデザイン"), region: tr("国・タイムゾーン"), ownerBooking: tr("店主の予約受付"), pages: tr("追加ページ"), header: tr("共通ヘッダー"), footer: tr("共通フッター"), menus: tr("メニュー"), staff: tr("スタッフ・勤務"), hours: tr("営業時間・休業日"), rules: tr("予約ルール"), seating: tr("席の設定") }[k]),
+        tr("{0}を更新", { name: tr("店名"), industry: tr("業種"), reservationsEnabled: tr("予約受付"), description: tr("お店の紹介"), products: tr("扱っている品"), address: tr("アクセス"), appearance: tr("ページの色・画像・配置"), notificationEmail: tr("通知先"), map: tr("地図"), screens: tr("画面のデザイン"), region: tr("国・タイムゾーン"), ownerBooking: tr("店主の予約受付"), pages: tr("追加ページ"), header: tr("共通ヘッダー"), footer: tr("共通フッター"), menus: tr("メニュー"), staff: tr("スタッフ・勤務"), hours: tr("営業時間・休業日"), rules: tr("予約ルール"), seating: tr("席の設定") }[k]),
     );
 }

@@ -10,19 +10,22 @@ import { renderToStaticMarkup } from "react-dom/server";
 import { RestaurantReservationForm } from "../src/RestaurantReservation.tsx";
 import { z } from "zod";
 import { getLocale, tr } from "../shared/i18n.ts";
-import type { Booking, ShopConfig } from "./domain.ts";
+import { restaurantReservations, type Booking, type ShopConfig } from "./domain.ts";
+import { shopGuideFront, shopGuideInfo, shopGuideNetwork, shopGuideQueries, shopGuideTool } from "./shop-guide.ts";
 import { callRestaurantTool, restaurantTools } from "./restaurant-mcp.ts";
 import { agentCopy, reservePageCopy, sampleQueries } from "../shared/restaurant-agent-copy.ts";
 export { sampleQueries };
 
-// A restaurant's open agentic website (Worldwide Agentic Web MVP Profile 0.2):
+// A shop's open agentic website (Worldwide Agentic Web MVP Profile 0.2):
 //   /s/<slug>/agent/                 the public bundle other agent sites read: manifest, network, bridge, runtime
-//   /s/<slug>/agent/mcp              read-only MCP server: open seats and menu ingredients
+//   /s/<slug>/agent/mcp              read-only MCP server: restaurant seats/menu, or other-shop hours/products
 //   /s/<slug>/reserve                published reservation page with an optional assistant
 // The bundle is built per shop by the official build script, because the network names the shop's own MCP address.
 
 export const networkName = "reservation_concierge";
 export const frontAgent = "reservation_front";
+export const supportsShopAgent = (config: ShopConfig) => restaurantReservations(config) || config.industry === "other";
+const networkFor = (shop: AgenticShop) => shop.config.industry === "other" ? shopGuideNetwork : networkName;
 const skillDir = resolve("agentic/skill");
 const siteDir = resolve("agentic/site");
 const runtimeDir = join(skillDir, "runtime");
@@ -44,6 +47,7 @@ const siteFiles = new Set(["site.js", "ai-setup.js", "ai-connection.js", "reserv
 /** Files other origins fetch: these, and only these, carry the CORS header. */
 const publicFiles = new Set(["agent-manifest.json", `${networkName}.network.json`, "links.json", "agent-mcp.json", ".well-known/nsdeploy.json", ".well-known/nsdeploy-agent.json"]);
 const generatedFiles = new Set([...publicFiles, "bridge/action-bridge.html", "bridge/agent-manifest.json"]);
+const guideFiles = new Set(["agent-manifest.json", `${shopGuideNetwork}.network.json`, "links.json", "agent-mcp.json", ".well-known/nsdeploy.json", ".well-known/nsdeploy-agent.json"]);
 
 const escapeHtml = (text: string) => text.replace(/[&<>"']/g, character => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" })[character]!);
 
@@ -57,15 +61,18 @@ const themeColor = (config: ShopConfig) => ({ sage: "#3f5d4a", rose: "#8a3d52", 
 
 export function shopManifest(shop: AgenticShop, site: AgenticSite) {
   const name = shop.config.name;
+  const guide = shop.config.industry === "other";
+  const network = networkFor(shop);
+  const front = guide ? shopGuideFront : frontAgent;
   return {
-    brand: agentCopy.brand(name),
+    brand: guide ? `${name} ご案内` : agentCopy.brand(name),
     networks: [{
-      name: networkName,
-      front_man: frontAgent,
-      hocon: `./${networkName}.network.json`,
-      description: agentCopy.manifestDescription(name),
-      tags: ["agentified-website", "restaurant", "restaurant-reservation"],
-      sample_queries: sampleQueries(),
+      name: network,
+      front_man: front,
+      hocon: `./${network}.network.json`,
+      description: guide ? `${name}の営業時間・休業日・取扱品をご案内します。` : agentCopy.manifestDescription(name),
+      tags: guide ? ["agentified-website", "shop", "shop-guide"] : ["agentified-website", "restaurant", "restaurant-reservation"],
+      sample_queries: guide ? shopGuideQueries() : sampleQueries(),
     }],
     llm_router: { base_url: router(), mock: false, byok_router: router() },
     // The network calls nothing but this shop's own read-only MCP endpoint.
@@ -73,37 +80,38 @@ export function shopManifest(shop: AgenticShop, site: AgenticSite) {
     peer_policy: { mode: "closed", deny_origins: [], note: "Calls only this shop's own read-only MCP endpoint." },
     agent_mcp: {
       protocol: "nsdeploy-agent-mcp/v1",
-      network: networkName,
-      front_man: frontAgent,
+      network,
+      front_man: front,
       available: false,
-      reason: "The network itself is not exposed as an MCP facade; its agents use the shop's read-only MCP server for seats and menu facts.",
+      reason: guide ? "The guide uses the shop's read-only MCP server for opening hours and products." : "The network itself is not exposed as an MCP facade; its agents use the shop's read-only MCP server for seats and menu facts.",
     },
     theme: { primary: themeColor(shop.config) },
     linking: {
       protocol: "nsdeploy-link/v1",
-      exports: [{ network: networkName, front_man: frontAgent, aliases: [networkName, frontAgent], url: networkName }],
+      exports: [{ network, front_man: front, aliases: [network, front], url: network }],
       imports: [],
       link_updates: { mode: "browser-local" },
     },
     deployment: { mode: "static", self_contained_runtime: true, browser_mock: false, direct_byok: true, direct_mcp_requires_cors: true, public_mcp_facade: false },
-    actions: {
+    ...(!guide ? { actions: {
       version: 1,
       module: "./reservation-actions.js",
       bridge: "./bridge/action-bridge.html",
       agentTools: ["get_reservation_page_state", "get_reservation_request", "fill_reservation_form", "place_reservation"],
-    },
+    } } : {}),
   };
 }
 
 export async function shopHocon(shop: AgenticShop, site: AgenticSite) {
   const name = shop.config.name;
-  const template = await readFile(join(siteDir, `${networkName}.hocon`), "utf8");
+  const guide = shop.config.industry === "other";
+  const template = await readFile(join(siteDir, `${networkFor(shop)}.hocon`), "utf8");
   const values: Record<string, unknown> = {
-    __DESCRIPTION__: agentCopy.networkDescription(name),
-    __SAMPLE_QUERIES__: sampleQueries(),
+    __DESCRIPTION__: guide ? `${name}の営業時間と取扱品をご案内します。` : agentCopy.networkDescription(name),
+    __SAMPLE_QUERIES__: guide ? shopGuideQueries() : sampleQueries(),
     __MODEL__: model(),
     __SHOP_NAME__: name,
-    __FRONT_DESCRIPTION__: `Reservation desk of the restaurant ${name}: open seats for any party size (seats only or with a course), what each course and dish contains, and reservations on the restaurant's own page.`,
+    __FRONT_DESCRIPTION__: guide ? `Read-only guide for ${name}: opening hours, closed days, address and published products or services.` : `Reservation desk of the restaurant ${name}: open seats for any party size (seats only or with a course), what each course and dish contains, and reservations on the restaurant's own page.`,
     __MCP_URL__: `${site.origin}${site.base}/agent/mcp`,
   };
   // JSON strings are valid HOCON strings. Braces would be read as {placeholders} by the runtime.
@@ -113,6 +121,7 @@ export async function shopHocon(shop: AgenticShop, site: AgenticSite) {
 const builds = new Map<string, Promise<string>>();
 /** Build (once per content) the shop's bundle with the official script; returns its folder. */
 export async function shopBundle(shop: AgenticShop, site: AgenticSite) {
+  const network = networkFor(shop);
   const hocon = await shopHocon(shop, site);
   const manifest = JSON.stringify(shopManifest(shop, site), null, 2) + "\n";
   const script = join(skillDir, "scripts/build_network.mjs");
@@ -126,10 +135,10 @@ export async function shopBundle(shop: AgenticShop, site: AgenticSite) {
       const work = `${dir}.${process.pid}.${Date.now()}`;
       await mkdir(work, { recursive: true });
       try {
-        await writeFile(join(work, `${networkName}.hocon`), hocon);
+        await writeFile(join(work, `${network}.hocon`), hocon);
         await writeFile(join(work, "agent-manifest.json"), manifest);
-        await writeFile(join(work, "links.json"), JSON.stringify({ version: 1, networks: { [networkName]: {} } }, null, 2) + "\n");
-        const result = await run(process.execPath, [script, join(work, `${networkName}.hocon`), "--manifest", join(work, "agent-manifest.json"), "--runtime", runtimeDir], { timeout: 60000 })
+        await writeFile(join(work, "links.json"), JSON.stringify({ version: 1, networks: { [network]: {} } }, null, 2) + "\n");
+        const result = await run(process.execPath, [script, join(work, `${network}.hocon`), "--manifest", join(work, "agent-manifest.json"), "--runtime", runtimeDir], { timeout: 60000 })
           .catch(error => { throw new Error(`Agent network build failed for ${shop.slug}:\n${error.stdout || ""}${error.stderr || error.message}`); });
         await writeFile(join(work, ".built"), result.stdout || "ok");
         // Another process may have finished the same build first; either result is identical.
@@ -198,14 +207,23 @@ function assistantPanel(t: ReservationCopy) {
 
 /** Add the same page-owned assistant to a restaurant's published home page. */
 export function storefrontAssistant(shop: AgenticShop, site: AgenticSite, reservation = false) {
-  const t = reservePageCopy(getLocale(), escapeHtml(shop.config.name));
+  const locale = getLocale();
+  const name = escapeHtml(shop.config.name);
+  const guide = shop.config.industry === "other";
+  const t = { ...reservePageCopy(locale, name), ...(guide ? locale === "ja" ? {
+    assistant: `${name}のご案内`, assistantLead: "営業時間やお休み、扱っている品についてご相談ください。",
+    privacy: "メッセージと公開されているお店の情報は、「AIの設定」で選んだプロバイダーに送られます。キーはこのブラウザに保存され、お店には送られません。",
+  } : {
+    assistant: `${name} shop guide`, assistantLead: "Ask about opening hours, closed days and the products the shop carries.",
+    privacy: "Your messages and public shop information go to the provider you choose in AI settings. Your key stays in this browser and is never sent to the shop.",
+  } : {}) };
   const base = site.base;
   const parent = parentSite();
   return {
-    attributes: ` data-slug="${escapeHtml(shop.slug)}"${parent ? ` data-parent-origin="${escapeHtml(parent.origin)}"` : ""}`,
+    attributes: ` data-slug="${escapeHtml(shop.slug)}"${guide ? ' data-agent-kind="shop"' : ""}${parent ? ` data-parent-origin="${escapeHtml(parent.origin)}"` : ""}`,
     head: `<link rel="stylesheet" href="${base}/agent/assistant.css"><link rel="stylesheet" href="${base}/agent/storefront-agent.css"><link rel="agent-manifest" href="${base}/agent/agent-manifest.json"><script type="module" src="${base}/agent/reserve-page.js"></script><script type="module" src="${base}/agent/site.js"></script>`,
     // Other pages keep backing controls hidden; /reserve owns its visible form.
-    body: `${reservation ? "" : `<button id="assistant-toggle" class="restaurant-ai-toggle" type="button" aria-controls="assistant" aria-expanded="false" disabled>${t.askAI}</button><div id="restaurant-reservation" class="restaurant-reservation" hidden>${renderToStaticMarkup(createElement(RestaurantReservationForm, { config: shop.config }))}</div>`}${assistantPanel(t)}`,
+    body: `${reservation ? "" : `<button id="assistant-toggle" class="restaurant-ai-toggle" type="button" aria-controls="assistant" aria-expanded="false" disabled>${t.askAI}</button>${guide ? "" : `<div id="restaurant-reservation" class="restaurant-reservation" hidden>${renderToStaticMarkup(createElement(RestaurantReservationForm, { config: shop.config }))}</div>`}`}${assistantPanel(t)}`,
     csp: pageCsp(parent ? parent.origin : "'none'"),
     frameable: !!parent,
   };
@@ -240,6 +258,7 @@ export function agenticSite(options: {
   const rpcError = (id: unknown, code: number, message: string) => ({ jsonrpc: "2.0", id: id ?? null, error: { code, message } });
 
   async function mcp(req: IncomingMessage, res: ServerResponse, shop: AgenticShop & { id: string }, site: AgenticSite) {
+    const guide = shop.config.industry === "other";
     // No cookie or session is read here: the answers are the same for every caller.
     for (const name of ["Vary", "X-Frame-Options", "Content-Security-Policy"]) res.removeHeader(name);
     res.setHeader("Access-Control-Allow-Origin", "*");
@@ -268,16 +287,16 @@ export function agenticSite(options: {
     if (method === "initialize") return send(200, rpc(id, {
       protocolVersion: mcpProtocol,
       capabilities: { tools: { listChanged: false } },
-      serverInfo: { name: "gemihub-restaurant", title: `${shop.config.name} seats and menu`, version: "1.0.0" },
-      instructions: "Read-only: open seats (check_availability) and menu ingredients (find_menu_items) of one restaurant. Reservations are made on the restaurant's own page.",
+      serverInfo: { name: guide ? "gemihub-shop" : "gemihub-restaurant", title: `${shop.config.name} ${guide ? "opening hours and products" : "seats and menu"}`, version: "1.0.0" },
+      instructions: guide ? "Read-only: get_shop_info returns this shop's published opening hours and products. Stock is unknown. No orders, payments or reservations." : "Read-only: open seats (check_availability) and menu ingredients (find_menu_items) of one restaurant. Reservations are made on the restaurant's own page.",
     }));
     if (method === "ping") return send(200, rpc(id, {}));
-    if (method === "tools/list") return send(200, rpc(id, { tools: restaurantTools }));
+    if (method === "tools/list") return send(200, rpc(id, { tools: guide ? [shopGuideTool] : restaurantTools }));
     if (method === "tools/call") {
       const call = z.object({ name: z.string().max(80), arguments: z.record(z.string(), z.unknown()).default({}) }).safeParse(params);
       if (!call.success) return send(200, rpcError(id, -32602, "Invalid params: name and arguments are required."));
       try {
-        const result = await callRestaurantTool(call.data.name, call.data.arguments, {
+        const result = guide ? call.data.name === "get_shop_info" ? shopGuideInfo(shop.config, `${site.origin}${site.base}/`, call.data.arguments) : undefined : await callRestaurantTool(call.data.name, call.data.arguments, {
           config: shop.config,
           bookings: () => options.bookings(shop.id),
           reservePageUrl: `${site.origin}${site.base}/reserve`,
@@ -306,7 +325,7 @@ export function agenticSite(options: {
   };
 
   return {
-    /** Whether this path belongs to a restaurant's agent bundle. */
+    /** Whether this path belongs to a shop's agent bundle. */
     route(path: string, hosted = false) {
       // On the shop's own host the same pages sit at the root.
       const match = hosted ? path.match(/^\/()agent\/(.+)$/) : path.match(/^\/s\/([^/]+)\/agent\/(.+)$/);
@@ -329,14 +348,15 @@ export function agenticSite(options: {
       }
       // The relay's service worker must control the reservation page, which sits one folder above it.
       if (siteFiles.has(rest)) return await file(res, method, join(siteDir, rest), rest === "llm-relay-sw.js" ? { "Service-Worker-Allowed": `${site.base}/` } : undefined) || notFound(res);
-      if (!generatedFiles.has(rest)) return notFound(res);
+      const guide = shop.config.industry === "other";
+      if (!(guide ? guideFiles : generatedFiles).has(rest)) return notFound(res);
       const dir = await shopBundle(shop, site);
       if (rest.startsWith("bridge/")) {
         // Other agent sites load the bridge in a hidden frame, so framing must stay allowed here.
         res.removeHeader("X-Frame-Options");
         res.setHeader("Content-Security-Policy", "default-src 'self'; script-src 'self'; connect-src 'self'; base-uri 'self'; form-action 'none'");
       }
-      return await file(res, method, join(dir, rest), publicFiles.has(rest) ? { "Access-Control-Allow-Origin": "*" } : undefined) || notFound(res);
+      return await file(res, method, join(dir, rest), (guide ? guideFiles : publicFiles).has(rest) ? { "Access-Control-Allow-Origin": "*" } : undefined) || notFound(res);
     },
   };
 }

@@ -882,7 +882,7 @@ export class App {
     const parentOrigin = document.documentElement.dataset.parentOrigin;
     if (parentOrigin) {
       // Addressed to the registered finder alone; it carries no key, name or reservation.
-      window.parent.postMessage({ type: "gemihub:reserve-ready", version: 1, shop: App.page.slug }, parentOrigin);
+      window.parent.postMessage({ type: "gemihub:reserve-ready", version: 1, shop: App.page?.slug || document.documentElement.dataset.slug }, parentOrigin);
     }
   }
 
@@ -890,9 +890,14 @@ export class App {
   static async start() {
     // The worker controls /s/<slug>/ and its descendants. Navigation in older
     // published headers can still point at the home URL without its final slash.
-    const shopBase = document.getElementById("root")?.dataset.shopBase;
+    const shopBase = document.getElementById("root")?.dataset.shopBase || new URL("../", import.meta.url).pathname.replace(/\/$/, "");
     if (App.embedded() && shopBase && location.pathname === shopBase) {
       location.replace(`${shopBase}/${location.search}${location.hash}`);
+      return null;
+    }
+    // Information-only guides have no reservation form or public booking API to load.
+    if (document.documentElement.dataset.agentKind === "shop") {
+      App.announceEmbedded();
       return null;
     }
     // The server names the shop; under /s/<slug>/reserve the address says the same.

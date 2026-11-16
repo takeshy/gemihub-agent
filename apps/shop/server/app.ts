@@ -97,7 +97,7 @@ import {
   type ShopConfig,
   type Booking,
 } from "./domain.ts";
-import { agenticSite, appSite, clientAddress, parentSite, storefrontAssistant } from "./agentic.ts";
+import { agenticSite, appSite, clientAddress, parentSite, storefrontAssistant, supportsShopAgent } from "./agentic.ts";
 /** Reservations one address may make at a restaurant in an hour, and upcoming ones one phone number may hold there. */
 const guestBookingsPerHour = 10, guestBookingsPerPhone = 3;
 import { canSeat, durationFor, reservableCourse, seatAvailability, seatProblemText, seatingProblem, seatsFor } from "./seats.ts";
@@ -1287,12 +1287,12 @@ export function createApp(
       const publicLogSlug = path.match(/^\/(?:api\/public|s)\/([^/]+)(?:\/|$)/)?.[1];
       const logShop = hosted || allShops.find(shop => ownerLogId ? shop.id === ownerLogId : !!publicLogSlug && shop.slug === publicLogSlug && !!shop.published);
       if (logShop) logs.bind(logShop.id);
-      // A restaurant's agent bundle and read-only MCP server. Public, and answered
+      // A shop's agent bundle and read-only MCP server. Public, and answered
       // before any session is read: other origins fetch these without credentials.
       const agentRoute = agentic.route(path, publicHost);
       if (agentRoute) {
         const agentShop = publicHost ? hosted : allShops.find(shop => shop.slug === agentRoute.slug);
-        if (agentShop?.published && restaurantReservations(agentShop.published) && agentShop.publication !== "provisional")
+        if (agentShop?.published && supportsShopAgent(agentShop.published) && agentShop.publication !== "provisional")
           return await agentic.handle(req, res, { id: agentShop.id, slug: agentShop.slug, config: agentShop.published }, agentRoute, publicHost ? { origin: `https://${host}`, base: "" } : appSite(origin(), agentShop.slug));
         // On a shop's own host these paths may belong to its other pages; under /s/<slug> nothing else lives here.
         if (!publicHost) return json(res, { error: tr("見つかりません") }, 404);
@@ -4418,12 +4418,12 @@ export function createApp(
           assertStorefrontAccess(shop);
           if (category === "reserve" && (!restaurantReservations(shop.published) || key)) fail(404, tr("ページがありません"));
           if (shop.published.industry === "restaurant" && ["mine", "contact"].includes(url.searchParams.get("pane") || "")) return redirect(res, languageUrl(publicHost ? "/" : `/s/${encodeURIComponent(shop.slug)}/`));
-          const restaurantParent = shop.published.industry === "restaurant" ? parentSite() : undefined;
-          if (restaurantParent) {
+          const agentParent = supportsShopAgent(shop.published) ? parentSite() : undefined;
+          if (agentParent) {
             // Navigation stays inside the registered parent's frame, including public
             // customer screens. API and management responses keep their default policy.
             res.removeHeader("X-Frame-Options");
-            res.setHeader("Content-Security-Policy", String(res.getHeader("Content-Security-Policy")).replace(/frame-ancestors [^;]+/, `frame-ancestors ${restaurantParent.origin}`));
+            res.setHeader("Content-Security-Policy", String(res.getHeader("Content-Security-Policy")).replace(/frame-ancestors [^;]+/, `frame-ancestors ${agentParent.origin}`));
           }
           if (!category && shop.published.industry === "restaurant" && url.searchParams.get("pane") === "reserve" && !url.searchParams.has("checkout")) {
             // Existing published navigation still points at the former booking pane.
@@ -4451,7 +4451,7 @@ export function createApp(
             // fixed section for this shop's owner/customer, including older releases.
             data = signedIn ? Buffer.from(html.toString().replace(/<section class="public-auth"><a class="button primary" href="[^"]*#email-login">[^<]*<\/a><\/section>/, "")) : Buffer.from(html);
             let assistantVersion = "";
-            if (shop.published && restaurantReservations(shop.published)) {
+            if (shop.published && supportsShopAgent(shop.published)) {
               const assistant = storefrontAssistant({ slug: shop.slug, config: shop.published }, publicHost ? { origin: `https://${host}`, base: "" } : appSite(origin(), shop.slug), category === "reserve");
               data = Buffer.from(data.toString().replace(/<html\b/, () => `<html${assistant.attributes}`).replace("</head>", () => `${assistant.head}</head>`).replace("</body>", () => `${assistant.body}</body>`));
               if (assistant.frameable) res.removeHeader("X-Frame-Options");

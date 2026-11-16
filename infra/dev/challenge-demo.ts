@@ -1,8 +1,10 @@
-import type { IncomingMessage, ServerResponse } from "node:http";
+import type { ServerResponse } from "node:http";
 import { readFile } from "node:fs/promises";
 import { fileURLToPath } from "node:url";
 import { resolve } from "node:path";
 import { createApp } from "../../apps/shop/server/app.ts";
+import { appSite, storefrontAssistant } from "../../apps/shop/server/agentic.ts";
+import { sample, shopSchema } from "../../apps/shop/server/domain.ts";
 import { origin } from "../../apps/shop/server/auth.ts";
 import { Store, type Shop } from "../../apps/shop/server/store.ts";
 import { seedRestaurantDemo } from "../../apps/shop/scripts/seed-restaurant-demo.ts";
@@ -15,7 +17,6 @@ export async function createChallengeDemo() {
     if (!value || new URL(value).origin !== value) throw new Error("Challenge demo requires explicit app and parent origins");
   }
   const shopOrigin = origin();
-  const parentOrigin = new URL(process.env.AGENT_PARENT_URL!).origin;
   const demoArea = "神奈川県横浜市港北区大倉山";
   const store = new Store(":memory:");
   const { shops: restaurants } = await seedRestaurantDemo(store);
@@ -41,57 +42,20 @@ export async function createChallengeDemo() {
     ...[...restaurants, "komado"].map(slug => [`/s/${slug}/demo-photo.webp`, `${slug}.webp`]),
     [`${retailBase}/okurayama.webp`, "okurayama.webp"],
   ].map(async ([path, file]) => [path, await readFile(new URL(`./challenge-assets/${file}`, import.meta.url))] as const)));
-  const protocolVersion = "2025-06-18";
-  const infoTool = {
-    name: "get_shop_info",
-    description: "文具と器 こまどの営業時間と取扱品を取得します。",
-    inputSchema: { type: "object", properties: {}, additionalProperties: false },
-    annotations: { readOnlyHint: true, idempotentHint: true, openWorldHint: false },
-  };
-
-  function json(res: ServerResponse, value: unknown, status = 200) {
-    res.writeHead(status, { "Content-Type": "application/json; charset=utf-8" });
+  const retailConfig = shopSchema.parse({ ...structuredClone(sample), name: retail.name, industry: "other",
+    description: `作家の器、手帳、紙雑貨、贈り物用の文具を扱う架空のデモ店舗。`, address: demoArea,
+    products: retail.products, menus: [], staff: [], ownerBooking: true,
+    hours: { start: "12:00", end: "21:00", closedWeekdays: [0, 1, 2, 3, 4, 5], holidays: [] },
+  });
+  await store.saveShop({ id: "challenge-komado", slug: "komado", owner: "komado-owner@example.com",
+    published: retailConfig, publication: "public", draft: null, revision: 1, history: [] });
+  const guide = storefrontAssistant({ slug: "komado", config: retailConfig }, appSite(shopOrigin, "komado"));
+  function json(res: ServerResponse, value: unknown) {
+    res.writeHead(200, { "Content-Type": "application/json; charset=utf-8" });
     res.end(JSON.stringify(value));
   }
-
-  async function retailMcp(req: IncomingMessage, res: ServerResponse) {
-    let bytesRead = 0;
-    const chunks: Buffer[] = [];
-    try {
-      for await (const chunk of req.iterator({ destroyOnReturn: false })) {
-        bytesRead += chunk.length;
-        if (bytesRead > 8192) { req.resume(); return json(res, { error: "Request too large" }, 413); }
-        chunks.push(chunk);
-      }
-      const request = JSON.parse(Buffer.concat(chunks).toString("utf8"));
-      if (request?.jsonrpc !== "2.0" || typeof request.method !== "string") throw new Error("Invalid request");
-      const reply = (result: unknown) => json(res, { jsonrpc: "2.0", id: request.id, result });
-      switch (request.method) {
-        case "initialize": return reply({ protocolVersion, capabilities: { tools: {} }, serverInfo: { name: "komado-shop-info", version: "1" } });
-        case "notifications/initialized": res.writeHead(202); return res.end();
-        case "tools/list": return reply({ tools: [infoTool] });
-        case "tools/call":
-          if (request.params?.name === infoTool.name) {
-            return reply({ structuredContent: retail, content: [{ type: "text", text: JSON.stringify(retail) }] });
-          }
-      }
-      return json(res, { jsonrpc: "2.0", id: request.id, error: { code: -32601, message: "Method or tool not found" } });
-    } catch {
-      return json(res, { jsonrpc: "2.0", id: null, error: { code: -32700, message: "Invalid JSON-RPC request" } }, 400);
-    }
-  }
-
-  const retailManifest = {
-    brand: retail.name,
-    networks: [{ name: "shop_guide", front_man: "shop_front", hocon: "./shop_guide.network.json" }],
-    allowed_peers: [shopOrigin],
-    peer_policy: { mode: "closed", deny_origins: [] },
-  };
-  const retailNetwork = {
-    tools: [{ name: "shop_front", instructions: "get_shop_infoで確認した営業時間と取扱品を依頼に合わせて案内してください。予約・注文・決済は受け付けません。", tools: [{ url: `${shopOrigin}${agentBase}/mcp`, tools: [infoTool.name] }] }],
-  };
   const retailPage = `<!doctype html>
-  <html lang="ja"><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1">
+  <html lang="ja"${guide.attributes}><head><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1">
   <title>${retail.name}</title><meta name="description" content="作家の器、手帳、紙雑貨、贈り物用の文具を扱う架空のデモ店舗。">
   <style>
     * { box-sizing: border-box; }
@@ -113,36 +77,12 @@ export async function createChallengeDemo() {
     .area { display:grid; grid-template-columns:6rem 1fr; align-items:center; gap:1rem; padding:.6rem; border-block:1px solid #d9dbcd; }
     .area img { display:block; width:6rem; height:3.85rem; object-fit:cover; border-radius:.3rem; }
     @media (max-width:680px) { .cover,.info {grid-template-columns:1fr;} figure {min-height:0;aspect-ratio:16/9;} }
-  </style>
+  </style>${guide.head}</head><body>
   <main><section class="cover"><div class="intro"><p class="genre">大倉山の雑貨店</p><h1><span>文具と器</span> <span>こまど</span></h1>
   <p>毎日使う器と、手に取りたくなる紙もの。</p><p class="demo">架空のデモ店舗 · ${retail.area}</p></div>
   <figure><img src="${retailBase}/demo-photo.webp" alt="作家の器と文具のイメージ"><figcaption>商品のイメージ</figcaption></figure></section>
   <div class="info"><section><h2>営業時間</h2><p>${retail.hours}</p></section><section><h2>取扱品</h2><p>${retail.products.join("、")}</p></section></div>
-  <div class="area"><img src="${retailBase}/okurayama.webp" alt=""><strong>大倉山の梅園</strong></div></main></html>`;
-
-  async function serveRetail(req: IncomingMessage, res: ServerResponse, path: string) {
-    const method = req.method;
-    if ((method === "GET" || method === "HEAD") && (path === retailBase || path === `${retailBase}/`)) {
-      res.writeHead(200, {
-        "Content-Type": "text/html; charset=utf-8",
-        "Content-Security-Policy": `default-src 'none'; style-src 'unsafe-inline'; img-src 'self'; frame-ancestors ${parentOrigin}; base-uri 'none'`,
-      });
-      return res.end(method === "HEAD" ? undefined : retailPage);
-    }
-    res.setHeader("Access-Control-Allow-Origin", "*");
-    if (path === `${agentBase}/mcp`) {
-      res.setHeader("Access-Control-Allow-Headers", "Content-Type, MCP-Protocol-Version, Mcp-Session-Id");
-      res.setHeader("Access-Control-Allow-Methods", "POST, OPTIONS");
-      if (method === "OPTIONS") { res.writeHead(204); return res.end(); }
-      if (method === "POST") return retailMcp(req, res);
-    }
-    if (method === "GET" || method === "HEAD") {
-      if (path === `${agentBase}/agent-manifest.json`) return json(res, retailManifest);
-      if (path === `${agentBase}/shop_guide.network.json`) return json(res, retailNetwork);
-      if (path === `${agentBase}/links.json`) return json(res, { version: 1, networks: { shop_guide: {} } });
-    }
-    res.writeHead(404); res.end();
-  }
+  <div class="area"><img src="${retailBase}/okurayama.webp" alt=""><strong>大倉山の梅園</strong></div></main>${guide.body}</body></html>`;
 
   // Run the real restaurant booking flow with an in-memory database and a mail sink.
   const demoMail = async () => {};
@@ -160,7 +100,15 @@ export async function createChallengeDemo() {
       res.end(req.method === "HEAD" ? undefined : photo);
       return;
     }
-    if (path === retailBase || path.startsWith(`${retailBase}/`)) { void serveRetail(req, res, path); return; }
+    if (read && (path === retailBase || path === `${retailBase}/`)) {
+      res.writeHead(200, { "Content-Type": "text/html; charset=utf-8", "Content-Security-Policy": guide.csp });
+      res.end(req.method === "HEAD" ? undefined : retailPage);
+      return;
+    }
+    if (path.startsWith(`${agentBase}/`) && (read || path === `${agentBase}/mcp` && (req.method === "POST" || req.method === "OPTIONS"))) {
+      serveRestaurant(req, res);
+      return;
+    }
     const page = /^\/s\/([a-z-]+)(?:\/|$)/.exec(path);
     const api = /^\/api\/public\/([a-z-]+)(?:\/(seats|bookings))?$/.exec(path);
     const mcp = page && path.endsWith("/agent/mcp") && (req.method === "POST" || req.method === "OPTIONS");

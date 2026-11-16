@@ -4,7 +4,7 @@ export const liveSectionSchema = z.enum(["basic", "menus", "staff", "hours", "ru
 export type LiveSection = z.infer<typeof liveSectionSchema>;
 /** Sections the settings AI can propose; seat settings are edited by hand. */
 export type AiSection = Exclude<LiveSection, "seating">;
-export const basicSchema = z.object({ name: shopSchema.shape.name, industry: shopSchema.shape.industry, reservationsEnabled: shopSchema.shape.reservationsEnabled, description: shopSchema.shape.description, address: shopSchema.shape.address, notificationEmail: shopSchema.shape.notificationEmail, map: shopSchema.shape.map, region: shopSchema.shape.region });
+export const basicSchema = z.object({ name: shopSchema.shape.name, industry: shopSchema.shape.industry, reservationsEnabled: shopSchema.shape.reservationsEnabled, description: shopSchema.shape.description, products: shopSchema.shape.products, address: shopSchema.shape.address, notificationEmail: shopSchema.shape.notificationEmail, map: shopSchema.shape.map, region: shopSchema.shape.region });
 export const liveValue = (config: ShopConfig, section: LiveSection) => section === "basic" ? basicSchema.parse(config) : config[section];
 export function updateLiveValue(config: ShopConfig, section: LiveSection, value: unknown) {
   // Becoming a restaurant changes more than the basic fields: seats replace staff.

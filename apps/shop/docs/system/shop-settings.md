@@ -13,6 +13,7 @@ What the settings in `spec.md` mean and how changes are requested, approved, pub
 `spec.md` contains the shop's current settings as JSON:
 
 - `name`, `industry`, `description`, `address`: shop information shown to customers.
+- `products[]`: optional published goods for `other` shops, entered one per line in basic settings. Their read-only AI guide returns these names and active menu names through `get_shop_info`, along with public hours and the address. It cannot check stock or place orders, payments or reservations. Both `/s/<slug>/agent/` and a verified custom host's `/agent/` serve the guide. Draft data is never exposed, and provisional shops do not serve an agent. The published page uses the same finder relay and voice bridge as restaurant assistants.
 - `map`: `enabled` shows a Google Map in the access section of "About the shop"; `query` is the place shown, and when blank the `address` is used. Absent or disabled means no map.
 - `region`: `country` (`JP` or `US`) and `timeZone`. The country sets JPY or USD; the time zone sets local business dates and times. Missing region means JP / Asia/Tokyo for existing shops.
 - `notificationEmail`: where the shop receives booking and inquiry emails.

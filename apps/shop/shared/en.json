@@ -1,4 +1,6 @@
 {
+  "扱っている品": "Products carried",
+  "扱っている品（1行に1つ）": "Products carried (one per line)",
   "話題を変えるときは新しい会話をはじめると、AIが前の話題と混同しにくくなります。": "When changing topics, start a new conversation to help the AI avoid mixing up the current and previous topics.",
   "プレビュー": "Preview",
   "プレビューは編集内容と同じです。変更はありません。": "The preview already matches your edits. There are no changes.",

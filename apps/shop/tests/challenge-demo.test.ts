@@ -36,6 +36,14 @@ test("recovered four-store demo serves pages/photos/current agents and keeps man
     assert.ok(tools.length > 0); assert.ok(tools.every((tool: any) => tool.annotations?.readOnlyHint === true));
     const info = (await rpc("tools/call", { name: "get_shop_info", arguments: {} })).json;
     assert.ok(JSON.stringify(info).includes(name));
+    assert.match(page.body.toString(), /id="assistant-toggle"/);
+    assert.match((await call(`/s/${slug}/agent/site.js`)).body.toString(), /voice-bridge/);
+    assert.equal((await call(`/s/${slug}/agent/voice-bridge.js`)).status, 200);
+    if (slug === "komado") {
+      assert.equal(manifest.json.networks[0].name, "shop_guide");
+      assert.deepEqual(info.result.structuredContent.products, ["作家の器", "手帳", "紙雑貨", "贈り物用の文具"]);
+      assert.equal((await call(`/s/${slug}/agent/shop_guide.network.json`)).status, 200);
+    }
     if (slug !== "komado") {
       assert.equal((await call(`/s/${slug}/reserve`)).status, 200);
       assert.match((await call(`/s/${slug}/agent/site.js`)).body.toString(), /voice-bridge/);
@@ -49,7 +57,7 @@ test("recovered four-store demo serves pages/photos/current agents and keeps man
   for (const path of ["/api/demo-login", "/api/ai/session", "/phone/incoming", "/api/shops/anything/plan"]) assert.equal((await call(path, {})).status, 404, path);
   assert.equal((await call("/api/public/akari/bookings", {}, "https://evil.example")).status, 403);
   const unknown = await call("/s/komado/agent/mcp", { jsonrpc: "2.0", id: 2, method: "tools/call", params: { name: "purchase", arguments: {} } });
-  assert.equal(unknown.json.error.code, -32601);
+  assert.equal(unknown.json.error.code, -32602);
 });
 
 test("demo startup refuses accidental production or missing explicit origins", async () => {

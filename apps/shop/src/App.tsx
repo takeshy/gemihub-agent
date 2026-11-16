@@ -1,3 +1,4 @@
+import { ProductsInput } from "./ProductsInput";
 import { storefrontText } from "../shared/storefront-copy";
 import { setAiName, type AiName } from "./ai-name";
 import { primaryNavigationItems } from "../shared/navigation";
@@ -795,6 +796,9 @@ export function ConfigEditor({
           onChange={(e) => put("address", e.target.value)}
         />
       </Field>
+      {c.industry === "other" && <Field label={tr("扱っている品（1行に1つ）")}>
+        <ProductsInput value={c.products} onChange={names => put("products", names)} />
+      </Field>}
       <label className="check-field">
         <input type="checkbox" checked={!!c.map?.enabled} onChange={(e) => put("map", { enabled: e.target.checked, query: c.map?.query || "" })} />
         {tr("アクセスに Google マップを表示する")}

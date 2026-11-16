@@ -79,9 +79,24 @@ export class AssistantMount {
     const english = document.documentElement.lang === "en";
     const reset = document.getElementById("ns-newchat");
     const input = document.getElementById("ns-input");
-    input.placeholder = english ? "Ask about seats or courses…" : "空席やコースについて相談…";
+    const idlePlaceholder = document.documentElement.dataset.agentKind === "shop"
+      ? english ? "Ask about hours or products…" : "営業時間や扱っている品について相談…"
+      : english ? "Ask about seats or courses…" : "空席やコースについて相談…";
+    const bar = document.querySelector(".ns-inputbar");
+    const send = document.getElementById("ns-send");
+    const syncControls = () => {
+      const active = bar.dataset.turnActive === "true";
+      input.placeholder = active
+      ? english ? "Add guidance while the assistant works…" : "返答中のAIに追加で伝える…"
+      : idlePlaceholder;
+      send.textContent = active ? english ? "Update" : "追加" : english ? "Send" : "送信";
+    };
+    // The runtime restores its original placeholder after every turn; keep this page's wording.
+    const observer = new MutationObserver(syncControls);
+    observer.observe(bar, { attributes: true, attributeFilter: ["data-turn-active"] });
+    window.addEventListener("pagehide", () => observer.disconnect(), { once: true });
+    syncControls();
     input.setAttribute("aria-label", english ? "Message to the AI" : "AIへのメッセージ");
-    document.getElementById("ns-send").textContent = english ? "Send" : "送信";
     const menu = document.createElement("details");
     menu.className = "assistant-chat-menu";
     const summary = document.createElement("summary");
@@ -109,7 +124,7 @@ export class AssistantMount {
     const panel = document.getElementById("assistant");
     const toggle = document.getElementById("assistant-toggle");
     const syncBackground = () => {
-      for (const element of document.querySelectorAll(".reserve-shell, #root, .restaurant-site-header")) element.inert = !panel.hidden;
+      for (const element of document.querySelectorAll(".reserve-shell, #root, .restaurant-site-header, body > main")) element.inert = !panel.hidden;
     };
     const storageKey = `restaurant-assistant-open:${document.documentElement.dataset.slug}`;
     const show = (open) => {
@@ -148,7 +163,17 @@ export class AssistantMount {
   }
 
   static words() {
-    return WORDS[document.documentElement.lang === "en" ? "en" : "ja"];
+    const english = document.documentElement.lang === "en";
+    const words = WORDS[english ? "en" : "ja"];
+    return document.documentElement.dataset.agentKind === "shop" ? { ...words,
+      greeting: english ? "Ask me about opening hours, closed days, directions or the products the shop carries." : "営業時間やお休み、お店への行き方、扱っている品についてご相談ください。",
+      relay: english ? { ...words.relay,
+        waiting: "On the shop finder site, allow this shop's chat to use your AI.",
+        open: "Connected to the AI you set up on the shop finder site. Your AI key has not been given to this shop.",
+        closed: "The AI relay has stopped. To go on chatting, open this shop again on the shop finder site.",
+        unsupported: "With this browser's settings the AI chat cannot be used here. Reload the page on the shop finder site to try again.",
+      } : words.relay,
+    } : words;
   }
 
   /** The dialog's words for one action, from the page so its own button says the same. */
@@ -162,9 +187,9 @@ export class AssistantMount {
    * :return: The runtime engine, or null when boot failed.
    */
   static async start() {
-    if (!App.page) return null;
+    if (!App.page && document.documentElement.dataset.agentKind !== "shop") return null;
     AssistantMount.mountPanel();
-    if (App.embedded()) mountShopVoiceBridge(() => AssistantMount.startAssistant(), App.page.slug);
+    if (App.embedded()) mountShopVoiceBridge(() => AssistantMount.startAssistant(), App.page?.slug || document.documentElement.dataset.slug);
     if (!App.embedded()) return AssistantMount.startAssistant();
   }
 

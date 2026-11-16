@@ -67,6 +67,8 @@ gcloud compute ssh gemihub-dev --project=geminihub-486523 --zone=asia-northeast1
 
 `challenge-demo`は上記と同じビルド済みイメージの`infra/dev/challenge-demo.ts`を起動し、炉端 灯・トラットリア ソーレ・広東 龍・文具と器 こまどだけを配信する。サービスと経路はCompose・Caddyfileに定義し、両ファイルはTerraformのVMメタデータにも保存する。`up --remove-orphans`で消える手作業の追加は使わない。Num05など通常の店舗と、音声AI・資料・管理画面のAPIは引き続き`app`へ接続する。
 
+こまどは店舗アプリの`other`向け案内AIを使う。`/s/komado/agent/shop_guide.network.json`を配信し、読み取り専用の`get_shop_info`で土曜12〜21時の営業時間と取扱品を返す。チャット・親からの音声連携は飲食店と同じ中継を使い、店舗への注文や予約を確定するツールは公開しない。
+
 起動コード・テーマ・写真5点は、VMに残っていた旧イメージ`app@sha256:e3f86e63727da4148bfe795c354e1fbac2e8265f4a77237acbe44e3928288ec2`から回収した。新しいイメージでは現在の店舗アプリ・音声中継と組み合わせる。`DEMO_MODE=true`、`NODE_ENV=development`、公開Origin、親Origin、3010番ポートを明示し、秘密の環境ファイル・認証情報・本番DB・永続ボリューム・ホストの公開ポートは渡さない。ファイルは読み取り専用で、一時ファイルだけ専用tmpfsへ書く。
 
 元の起動コードどおりDBはメモリ内、メールは送信しない。デモ予約はコンテナの再作成で初期化される。4店舗の定義・写真・初期予約はソースから毎回再生成するので、以前のコンテナの環境変数や保存先を探して引き継ぐ必要はない。親の店舗一覧やチャット資料は別の永続領域に残る。`/healthz`の起動確認に失敗したデモへ新しいCaddyを起動しない。

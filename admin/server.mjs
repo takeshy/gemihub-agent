@@ -58,11 +58,12 @@ export function createAdminServer({ root = process.env.PARENT_ROOT || fileURLToP
       const url = new URL(req.url, origin);
       if (url.origin !== origin) return send(403, { error: "接続先が不正です" });
       if (!["GET", "HEAD"].includes(req.method) && req.headers.origin !== origin) return send(403, { error: "管理画面と同じOriginから操作してください" });
-      const oauthReturn = req.method === "GET" && url.pathname === "/auth/google/callback";
+      const oauthReturn = req.method === "GET" && ["/auth/google/callback", "/auth/demo"].includes(url.pathname);
       const pageNavigation = req.method === "GET" && url.pathname === "/" && req.headers["sec-fetch-mode"] === "navigate" && req.headers["sec-fetch-dest"] === "document";
       if (req.headers["sec-fetch-site"] === "cross-site" && !oauthReturn && !pageNavigation) return send(403, { error: "別サイトからはアクセスできません" });
       if (auth && req.method === "GET" && url.pathname === "/auth/google") return await auth.begin(res, origin);
       if (auth && req.method === "GET" && url.pathname === "/auth/google/callback") return await auth.callback(req, res, url, origin);
+      if (auth?.demo && req.method === "GET" && url.pathname === "/auth/demo") return await auth.demo(res, url, origin);
       const user = auth ? await auth.session(req) : { email: "test-operator@example.com" };
       if (req.method === "GET" && url.pathname === "/api/session") return send(200, auth ? auth.status(user) : { user, configured: true });
       if (req.method === "POST" && url.pathname === "/api/logout") { if (auth) await auth.logout(req, res, origin); return send(200, { ok: true }); }

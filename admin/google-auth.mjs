@@ -92,6 +92,19 @@ export function createGoogleAuth({ root, env = process.env, oauthFactory = redir
       res.setHeader("Set-Cookie", [sessionCookie(origin, "finder_oauth", "", 0), sessionCookie(origin, "finder_operator", id, 8 * 3600)]);
       res.writeHead(302, { Location: "/" }); res.end();
     },
+    /** A shared demo link signs visitors in as the operator who already connected Gmail. Disabled unless a long token is configured. */
+    async demo(res, url, origin) {
+      const token = env.PARENT_DEMO_LOGIN_TOKEN || "";
+      if (!configured || token.length < 32 || !same(url.searchParams.get("token"), token)) fail(404, "見つかりません");
+      const id = randomBytes(32).toString("base64url");
+      await transact(data => {
+        const email = data.sender;
+        if (!admins.has(email) || !data.accounts[email]) fail(503, "運営者が先にGoogleでログインしてください。");
+        data.sessions[digest(id)] = { email, expires: Date.now() + 8 * 3600000 };
+      });
+      res.setHeader("Set-Cookie", sessionCookie(origin, "finder_operator", id, 8 * 3600));
+      res.writeHead(302, { Location: "/" }); res.end();
+    },
     async logout(req, res, origin) {
       const id = cookie(req, "finder_operator");
       if (id) await transact(data => { delete data.sessions[digest(id)]; });

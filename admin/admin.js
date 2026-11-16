@@ -196,9 +196,14 @@ $("#invite-form").addEventListener("submit", event => {
 });
 run(async () => {
   const session = await api("/api/session");
-  $("#operator-status").textContent = session.user ? `${session.user.email} としてログイン中` : session.setupMessage || "店舗の招待・管理には、運営者のGoogleログインが必要です。";
-  $("#google-login").hidden = !!session.user || !session.configured;
-  $("#logout").hidden = !session.user;
-  $("#add-shop").hidden = $("#registry").hidden = $("#invitations").hidden = !session.user;
-  if (session.user) { state = await api("/api/shops"); render(); mountSiteEditor({ api }); }
+  $("#operator-status").textContent = session.user?.email || "";
+  $("#login-note").textContent = session.setupMessage || "店舗の招待・管理には、運営者のGoogleログインが必要です。";
+  $("#google-login").hidden = !session.configured;
+  $("#operator").hidden = !!session.user;
+  $("#account").hidden = $("#registry").hidden = $("#invitations").hidden = !session.user;
+  if (session.user) {
+    state = await api("/api/shops"); render(); mountSiteEditor({ api });
+    const { publicUrl } = await api("/api/site");
+    if (publicUrl) { $("#finder-link").href = publicUrl; $("#finder-link").hidden = false; }
+  }
 });

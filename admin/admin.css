@@ -12,6 +12,9 @@ h3 { font-size: 1.05rem; }
 .panel { background: white; border: 1px solid #d5ddd5; border-radius: 14px; padding: 22px; margin: 20px 0; }
 button { background: #28594b; color: white; border: 1px solid transparent; border-radius: 7px; padding: 10px 16px; font: inherit; cursor: pointer; white-space: nowrap; }
 button.secondary { background: #f4f7f3; color: #28594b; border-color: #cbd8ce; }
+button.link { background: none; border: 0; padding: 0; color: #28594b; text-decoration: underline; font-size: inherit; }
+.account a { color: #28594b; font-weight: 600; white-space: nowrap; }
+.account { display: flex; flex-wrap: wrap; align-items: center; gap: 12px; margin: 0; align-self: flex-start; color: #58665f; font-size: .85rem; overflow-wrap: anywhere; }
 button.danger { color: #9d2929; background: #fff5f2; border-color: #ebc9c2; }
 button:hover { filter: brightness(.94); }
 button:disabled { opacity: .4; cursor: default; }

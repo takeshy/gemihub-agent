@@ -28,6 +28,9 @@ if (process.argv[4]) {
 for (const key of ["SESSION_SECRET", "PARENT_AUTH_SECRET", "PARENT_INTEGRATION_SECRET", "ACCESS_PASSWORD"]) {
   if (!data[key]) data[key] = randomBytes(32).toString("hex");
 }
+// Opt-in shared login link for demos; DEMO_LOGIN=off removes it and DEMO_LOGIN=on creates it once.
+if (process.env.DEMO_LOGIN === "off") delete data.PARENT_DEMO_LOGIN_TOKEN;
+else if (process.env.DEMO_LOGIN === "on" && !data.PARENT_DEMO_LOGIN_TOKEN) data.PARENT_DEMO_LOGIN_TOKEN = randomBytes(32).toString("hex");
 const local = parseEnv(await readFile(new URL("../../.env", import.meta.url), "utf8"));
 if (local.GEMINI_API_KEY) data.GEMINI_API_KEY = local.GEMINI_API_KEY;
 data.PARENT_ADMIN_EMAILS = operator; data.ADMIN_EMAILS = operator;

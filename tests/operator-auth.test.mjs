@@ -11,7 +11,7 @@ test("parent operators require allowed Google accounts; Gmail grants are encrypt
   const root = await mkdtemp(join(tmpdir(), "parent-google-auth-"));
   const secret = "integration-secret-".repeat(3), sent = [], invitations = [];
   let email = "admin@example.com", granted = "openid email profile https://www.googleapis.com/auth/gmail.send";
-  const auth = createGoogleAuth({ root, env: { GOOGLE_CLIENT_ID: "fixture-client", GOOGLE_CLIENT_SECRET: "fixture-secret", PARENT_ADMIN_EMAILS: email, PARENT_AUTH_SECRET: "encryption-key-".repeat(3) }, oauthFactory: redirect => ({
+  const auth = createGoogleAuth({ root, env: { GOOGLE_CLIENT_ID: "fixture-client", GOOGLE_CLIENT_SECRET: "fixture-secret", PARENT_ADMIN_EMAILS: email, PARENT_AUTH_SECRET: "encryption-key-".repeat(3), PARENT_DEMO_LOGIN_TOKEN: "demo-token-".repeat(4) }, oauthFactory: redirect => ({
     generateAuthUrl(args) { const url = new URL("https://accounts.google.com/authorize"); for (const [key, value] of Object.entries(args)) url.searchParams.set(key, Array.isArray(value) ? value.join(" ") : value); url.searchParams.set("redirect_uri", redirect); return url.href; },
     async getToken() { return { tokens: { id_token: "fixture-identity", refresh_token: "private-refresh-token", scope: granted } }; },
     async verifyIdToken() { return { getPayload: () => ({ email_verified: true, email }) }; },
@@ -41,6 +41,8 @@ test("parent operators require allowed Google accounts; Gmail grants are encrypt
     assert.ok(url.searchParams.get("scope").includes("gmail.send")); assert.ok(!url.searchParams.get("scope").includes("drive")); assert.equal(url.searchParams.get("code_challenge_method"), "S256");
     return { url: `${origin}/auth/google/callback?state=${url.searchParams.get("state")}&code=valid`, cookie: response.headers.get("set-cookie").split(";")[0] };
   };
+  const demoUrl = `${origin}/auth/demo?token=${"demo-token-".repeat(4)}`;
+  assert.equal((await fetch(demoUrl, { redirect: "manual" })).status, 503);
   const start = await begin();
   assert.equal((await fetch(start.url, { redirect: "manual" })).status, 400);
   email = "outsider@example.com";
@@ -57,6 +59,12 @@ test("parent operators require allowed Google accounts; Gmail grants are encrypt
   const status = await (await fetch(origin + "/api/session", { headers: { Cookie: session } })).json();
   assert.deepEqual(status, { user: { email }, configured: true });
   const disk = await readFile(join(root, "admin/auth.json"), "utf8");
+  assert.equal((await fetch(`${origin}/auth/demo?token=wrong`, { redirect: "manual" })).status, 404);
+  assert.equal((await fetch(`${origin}/auth/demo`, { redirect: "manual" })).status, 404);
+  const demo = await fetch(demoUrl, { headers: { "Sec-Fetch-Site": "cross-site" }, redirect: "manual" });
+  assert.equal(demo.status, 302);
+  const demoSession = demo.headers.getSetCookie().find(value => value.startsWith("finder_operator=")).split(";")[0];
+  assert.deepEqual(await (await fetch(origin + "/api/session", { headers: { Cookie: demoSession } })).json(), { user: { email }, configured: true });
   assert.ok(!disk.includes("private-refresh-token")); assert.ok(!disk.includes(session.split("=")[1]));
   assert.equal((await fetch(origin + "/auth.json", { headers: { Cookie: session } })).status, 404);
   assert.equal((await fetch(valid.url, { headers: { Cookie: valid.cookie }, redirect: "manual" })).status, 400);
@@ -82,6 +90,7 @@ test("parent administration stays closed when Google or the operator allowlist i
   assert.equal((await fetch(origin + "/api/session")).status, 200);
   assert.equal((await fetch(origin + "/api/shops")).status, 401);
   assert.equal((await fetch(origin + "/auth/google", { redirect: "manual" })).status, 503);
+  assert.equal((await fetch(origin + "/auth/demo?token=", { redirect: "manual" })).status, 404);
 });
 
 test("HTTPS administration pins its host and origin while private Gmail relay requires its server secret", async t => {

@@ -11,12 +11,11 @@
   <main>
     <header class="page-header">
       <div><p class="eyebrow">お店さがし / 運営管理</p><h1>つながるお店</h1><p>店のURLから情報を読み込み、紹介するお店に追加します。</p></div>
-      <button id="add-shop" type="button" hidden>＋ 店を追加</button>
+      <p id="account" class="account" hidden><a id="finder-link" target="_blank" rel="noopener" hidden>お店さがしを開く ↗</a><span id="operator-status"></span><button id="logout" class="link" type="button">サインアウト</button></p>
     </header>
     <section id="operator" class="panel" aria-label="運営者ログイン">
-      <p id="operator-status">運営者のログインを確認しています…</p>
+      <p id="login-note">運営者のログインを確認しています…</p>
       <a id="google-login" href="/auth/google" hidden>Googleでログイン</a>
-      <button id="logout" class="secondary" type="button" hidden>ログアウト</button>
     </section>
     <section id="site-design" class="panel" hidden aria-labelledby="site-design-heading">
       <div class="section-header"><div><h2 id="site-design-heading">お店さがしのページ</h2><p class="note">見た目や文章をAIに相談して変更できます。</p></div><button id="site-design-toggle" type="button">AIでページを編集</button></div>
@@ -33,7 +32,8 @@
     </section>
     <p id="mode" class="note"></p>
     <div id="message" role="status" aria-live="polite" hidden></div>
-    <section id="registry" aria-label="登録店一覧" class="panel" hidden>
+    <section id="registry" aria-labelledby="registry-heading" class="panel" hidden>
+      <div class="section-header"><h2 id="registry-heading">お店一覧</h2><button id="add-shop" type="button">＋ 店を追加</button></div>
       <p class="note mobile-note">表は横にスクロールできます。</p>
       <div class="table-scroll"><table>
         <thead><tr><th>店名</th><th>エリア</th><th>ジャンル</th><th>オリジン</th><th>状態</th><th>操作</th></tr></thead>

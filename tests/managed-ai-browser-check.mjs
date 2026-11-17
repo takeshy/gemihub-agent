@@ -13,6 +13,10 @@ const nativeFetch = globalThis.fetch, serverKey = "server-secret-never-in-browse
 const sse = content => `data: ${JSON.stringify({ choices: [{ delta: { content }, finish_reason: "stop" }] })}\n\ndata: [DONE]\n\n`;
 process.env.DEMO_MODE = "true"; process.env.GEMINI_API_KEY = serverKey; process.env.GEMINI_MODEL = "gemini-4-hydrogen";
 globalThis.fetch = async (url, options) => {
+  if (String(url) === "https://generativelanguage.googleapis.com/v1beta/decisions") {
+    assert.equal(options.headers["x-goog-api-key"], serverKey);
+    return Response.json({ answers: {} }); // Ambiguous greetings keep the normal conversation path.
+  }
   if (String(url) === "https://generativelanguage.googleapis.com/v1beta/openai/chat/completions") {
     assert.equal(options.headers.Authorization, `Bearer ${serverKey}`); calls.push(JSON.parse(options.body));
     return new Response(sse("Managed Gemini fixture answer."), { headers: { "Content-Type": "text/event-stream" } });

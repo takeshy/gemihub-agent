@@ -9,11 +9,12 @@ import { chromium, expect } from "playwright/test";
 const root = fileURLToPath(new URL("../site/", import.meta.url));
 const nail = { id: "nail", name: "Num05", area: "横浜市港北区", cuisine: "ネイル・美容サービス", description: "気さくなお店", pageUrl: "https://nail.example/", networkUrl: "", reservationEnabled: false };
 const other = { ...nail, id: "other", name: "雑貨のお店", cuisine: "雑貨", pageUrl: "https://other.example/" };
+let routingEnabled = false;
 const server = createServer(async (req, res) => {
   try {
     const path = new URL(req.url, "http://local").pathname;
     const json = data => { res.writeHead(200, { "Content-Type": "application/json" }); res.end(JSON.stringify(data)); };
-    if (path === "/api/ai/config") return json({ managed: true });
+    if (path === "/api/ai/config") return json({ managed: true, finderRouting: routingEnabled });
     if (path === "/api/ai/session") return json({ token: "fixture-session", model: "fixture-model", router: "/api/ai/v1" });
     if (path === "/api/ai/v1/models") return json({ data: [{ id: "fixture-model" }] });
     if (path === "/shop-registry.js") {
@@ -31,13 +32,23 @@ await new Promise(resolve => server.listen(0, "127.0.0.1", resolve));
 let browser;
 try {
   browser = await chromium.launch({ headless: true, executablePath: process.env.CHROMIUM_PATH || "/snap/bin/chromium", args: ["--no-sandbox"] });
-  for (const width of [1440, 390]) {
+  for (const enabled of [false, true]) for (const width of [1440, 390]) {
+    routingEnabled = enabled;
     const context = await browser.newContext({ viewport: { width, height: 1000 }, locale: "ja-JP" });
     const page = await context.newPage(), errors = [], external = [];
-    let modelCalls = 0, release;
+    let modelCalls = 0, decisionCalls = 0, release;
     const finalReady = new Promise(resolve => { release = resolve; });
     page.on("pageerror", error => errors.push(error.message));
     await context.route("https://**/*", route => { external.push(route.request().url()); return route.abort(); });
+    await page.route("**/api/ai/finder-route", async route => {
+      decisionCalls++;
+      const body = route.request().postDataJSON();
+      assert.equal(body.question, "ネイルサロンを探している");
+      assert.equal(body.shops.length, 2);
+      assert.equal(body.tools, undefined);
+      await finalReady;
+      await route.fulfill({ contentType: "application/json", body: JSON.stringify({ kind: "introduction", language: "ja", shopIds: ["nail"], shopsCertain: true, needsInquiry: false, needsAvailability: false, needsDocuments: false, fast: true }) });
+    });
     await page.route("**/api/ai/v1/chat/completions", async route => {
       const body = route.request().postDataJSON(); modelCalls++;
       const receipts = body.messages.filter(message => message.role === "tool");
@@ -58,12 +69,12 @@ try {
       await page.locator("#ns-input").fill("ネイルサロンを探している");
       await page.locator("#ns-send").click();
       const cards = page.locator(".finder-introductions .shop-introduction");
-      await expect.poll(() => modelCalls).toBe(2); // Search finished; final answer is still held.
+      await expect.poll(() => enabled ? decisionCalls : modelCalls).toBe(enabled ? 1 : 2);
       await expect(page.locator(".ns-inputbar")).toHaveAttribute("data-turn-active", "true");
       await expect(cards).toHaveCount(0);
       release();
       await expect(page.locator(".ns-inputbar")).toHaveAttribute("data-turn-active", "false");
-      await expect(page.locator("#ns-msgs")).toContainText("店舗サイトで詳しくご覧いただけます。");
+      await expect(page.locator("#ns-msgs")).toContainText(enabled ? "下の紹介カードから、店舗サイトをご確認ください。" : "店舗サイトで詳しくご覧いただけます。");
       await expect(cards).toHaveCount(1);
       await expect(cards).toContainText("Num05");
       await expect(cards.getByRole("link")).toHaveAttribute("href", nail.pageUrl);
@@ -76,14 +87,15 @@ try {
       });
       await expect(cards).toHaveCount(1); // Re-rendering must not duplicate or reorder results.
       assert.deepEqual(await order(), ["question", "answer", "cards"]);
-      assert.equal(modelCalls, 2);
+      assert.equal(modelCalls, enabled ? 0 : 2);
+      assert.equal(decisionCalls, enabled ? 1 : 0);
       assert.deepEqual(external, []);
       assert.deepEqual(errors, []);
       assert.equal(await page.evaluate(() => document.documentElement.scrollWidth > innerWidth), false);
       await page.locator(".assistant-chat-menu > summary").click();
       await page.locator("#ns-newchat").click();
       await expect(cards).toHaveCount(0);
-      console.log(`${width}px: question, answer, then nail card; two model calls; no shop contact, booking controls or duplicate cards.`);
+      console.log(`${width}px: question, answer, then nail card; ${decisionCalls} Decisions call, ${modelCalls} generation calls; no shop contact, booking controls or duplicate cards.`);
     } finally { release(); await context.close(); }
   }
 } finally {

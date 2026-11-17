@@ -12,6 +12,7 @@ import { aiConnection, mountAiConnection } from "./ai-connection.js";
 import { GuideVoice } from "./voice-chat.js";
 import { GUIDE_GREETING, guideGreeting } from "./guide-copy.js";
 import { mountDocumentPreview } from "./chat-documents.js";
+import { installFinderRouting } from "./finder-routing.js";
 
 /**
  * Boots the browser runtime in the page's assistant section.
@@ -101,6 +102,7 @@ export class AssistantMount {
         () => [...document.querySelectorAll("#ns-msgs .ns-msg.user")].at(-1)?.textContent || "");
       installInquiryPolicy(booted.engine, App.inquiries);
       const engine = booted.engine;
+      installFinderRouting(engine, connection, () => App.page);
       const model = () => engine.modelOverride || engine.top.network.config.llm_config.model_name;
       App.shopFrame = new ShopFrame({
         shops: App.page.shops, getPage: () => App.page, modelName: model, storage: AssistantMount.tabStorage(),

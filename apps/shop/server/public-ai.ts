@@ -3,6 +3,7 @@ import { once } from "node:events";
 import type { IncomingMessage, ServerResponse } from "node:http";
 import { Firestore } from "@google-cloud/firestore";
 import { tr } from "../shared/i18n.ts";
+import { decideFinderRoute, finderRoutingInputSchema } from "./finder-routing.ts";
 
 type RecordValue = Record<string, any>;
 type Counter = { id: string; limit: number; expiresAt: Date };
@@ -98,7 +99,7 @@ export function publicAi({ env = process.env, fetch: fetchImpl = globalThis.fetc
       let phase = "request";
       try {
         if (requestOrigin && !allowedOrigins.includes(requestOrigin)) throw failure(403, tr("このサイトからAIを利用してください。"));
-        if (path === "/api/ai/config" && req.method === "GET") { json(200, { managed: enabled, defaultMode: enabled ? "managed" : "byok", model: enabled ? model : "", reasoning, router: "/api/ai/v1", byok: true, voice: enabled && env.PUBLIC_AI_VOICE !== "false" }); return true; }
+        if (path === "/api/ai/config" && req.method === "GET") { json(200, { managed: enabled, defaultMode: enabled ? "managed" : "byok", model: enabled ? model : "", reasoning, router: "/api/ai/v1", byok: true, voice: enabled && env.PUBLIC_AI_VOICE !== "false", finderRouting: enabled && env.PUBLIC_AI_FINDER_ROUTING !== "false" }); return true; }
         if (!enabled) throw failure(503, tr("運営側のGeminiは現在利用できません。AIの設定からご自身のAPIキーも使えます。"));
         const ip = env.PUBLIC_AI_TRUST_PROXY === "true" ? String(req.headers["x-forwarded-for"] || req.socket.remoteAddress).split(",").at(-1)!.trim() : req.socket.remoteAddress || "unknown";
         const hour = Math.floor(now() / 3600000), day = Math.floor(now() / 86400000);
@@ -114,6 +115,24 @@ export function publicAi({ env = process.env, fetch: fetchImpl = globalThis.fetc
         const session = verify(String(req.headers.authorization || "").replace(/^Bearer /, ""));
         if (!session || !allowedOrigins.includes(session.origin) || requestOrigin && session.origin !== requestOrigin) throw failure(401, tr("AIの接続期限が切れました。ページを再読み込みしてください。"));
         if (path === "/api/ai/v1/models" && req.method === "GET") { json(200, { object: "list", data: [{ id: model, object: "model" }] }); return true; }
+        if (path === "/api/ai/finder-route" && req.method === "POST" && env.PUBLIC_AI_FINDER_ROUTING !== "false") {
+          if (!allowedOrigins.includes(requestOrigin)) throw failure(403, tr("このサイトからAIを利用してください。"));
+          const parsed = finderRoutingInputSchema.safeParse(await body(req, 128 * 1024));
+          if (!parsed.success || new Set(parsed.data.shops.map(shop => shop.id)).size !== parsed.data.shops.length) throw failure(400, tr("メッセージの形式を確認してください。"));
+          if (active >= 2) throw failure(429, tr("AIが混み合っています。少し待ってからお試しください。"));
+          active++;
+          const controller = new AbortController();
+          res.once("close", () => { if (!res.writableFinished) controller.abort(); });
+          try {
+            await data().charge([
+              { id: hash(`global:${day}`), limit: limit("PUBLIC_AI_DAILY_LIMIT", 1000), expiresAt: new Date((day + 2) * 86400000) },
+              { id: hash(`ip:${day}:${ip}:${secret}`), limit: limit("PUBLIC_AI_IP_DAILY_LIMIT", 100), expiresAt: new Date((day + 2) * 86400000) },
+              { id: hash(`session:${hour}:${session.sid}`), limit: 120, expiresAt: new Date((hour + 2) * 3600000) },
+            ]);
+            json(200, await decideFinderRoute(parsed.data, { apiKey: key, fetch: fetchImpl, signal: controller.signal }));
+          } finally { active--; }
+          return true;
+        }
         if (path !== "/api/ai/v1/chat/completions" || req.method !== "POST") throw failure(404, tr("見つかりません。"));
         if (!allowedOrigins.includes(requestOrigin)) throw failure(403, tr("このサイトからAIを利用してください。"));
         const input = await body(req);

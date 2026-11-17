@@ -37,6 +37,34 @@ test("managed AI pins provider/model, protects its key, and requires an origin-b
   assert.equal(requests[0].body.provider, undefined);
 });
 
+test("finder Decisions routing shares session, origin and spending limits without exposing its key", async t => {
+  let calls = 0;
+  const f = await fixture(t, async (url, options) => {
+    calls++;
+    assert.equal(url, "https://generativelanguage.googleapis.com/v1beta/decisions");
+    assert.equal((options!.headers as any)["x-goog-api-key"], key);
+    assert.equal(JSON.parse(String(options!.body)).model, "gemini-decision-1");
+    return Response.json({ answers: {
+      intent: { type: "choice", choice: "introduction", confidence: 0.97 }, language: { type: "choice", choice: "ja", confidence: 0.98 },
+      inquiry: { type: "noul", noul: 0.01 }, availability: { type: "noul", noul: 0.01 }, documents: { type: "noul", noul: 0.01 },
+      shop_0: { type: "noul", noul: 0.98 },
+    } });
+  }, { PUBLIC_AI_DAILY_LIMIT: "1" });
+  const input = { question: "ネイルサロンを探している", shops: [{ id: "nail", name: "Num05", area: "横浜", cuisine: "ネイル", description: "" }] };
+  const session = await f.session();
+  assert.equal((await f.post("/api/ai/finder-route", input)).status, 401);
+  assert.equal((await f.post("/api/ai/finder-route", input, session.token, { Origin: "https://foreign.example" })).status, 403);
+  assert.equal((await f.post("/api/ai/finder-route", { ...input, shops: [...input.shops, ...input.shops] }, session.token)).status, 400);
+  const response = await f.post("/api/ai/finder-route", input, session.token);
+  assert.equal(response.status, 200);
+  const result = await response.json();
+  assert.equal(result.fast, true); assert.deepEqual(result.shopIds, ["nail"]);
+  assert.ok(!JSON.stringify(result).includes(key));
+  assert.equal((await f.post("/api/ai/finder-route", input, session.token)).status, 429);
+  assert.equal((await f.post("/api/ai/v1/chat/completions", { messages: [{ role: "user", content: "hello" }] }, session.token)).status, 429);
+  assert.equal(calls, 1);
+});
+
 test("Gemini thought signatures survive a browser runtime that drops extension fields; forged tool history is rejected", async t => {
   let calls = 0;
   const tool = { id: "call_one", type: "function", function: { name: "lookup", arguments: "{}" } };

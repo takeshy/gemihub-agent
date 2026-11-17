@@ -128,3 +128,56 @@ test("provider errors and streamed chunks never echo the server key", async t =>
   const bad = await error.post("/api/ai/v1/chat/completions", { messages: [{ role: "user", content: "Hello" }] }, errorSession.token);
   assert.equal(bad.status, 502); assert.ok(!(await bad.text()).includes(key));
 });
+
+test("a five-request burst completes with four concurrent gateway slots", { timeout: 5000 }, async t => {
+  let active = 0, peak = 0;
+  let release!: () => void;
+  const gate = new Promise<void>(resolve => { release = resolve; });
+  let fourStarted!: () => void;
+  const ready = new Promise<void>(resolve => { fourStarted = resolve; });
+  const f = await fixture(t, async () => {
+    peak = Math.max(peak, ++active);
+    if (active === 4) fourStarted();
+    await gate;
+    active--;
+    return new Response(text("ok"));
+  });
+  const { token } = await f.session();
+  const requests = Promise.all(Array.from({ length: 5 }, async () => {
+    const response = await f.post("/api/ai/v1/chat/completions", { messages: [{ role: "user", content: "空席は？" }] }, token);
+    await response.text();
+    return response.status;
+  }));
+  try { await ready; } finally { release(); }
+  assert.deepEqual(await requests, [200, 200, 200, 200, 200]);
+  assert.equal(peak, 4);
+});
+
+test("a configured single slot holds queued requests until the stream ends and caps the backlog", { timeout: 5000 }, async t => {
+  let finish!: () => void;
+  let forwarded = 0;
+  const f = await fixture(t, async () => {
+    if (++forwarded > 1) return new Response(text("next"));
+    return new Response(new ReadableStream({
+      start(controller) {
+        controller.enqueue(new TextEncoder().encode(text("first")));
+        finish = () => controller.close();
+      },
+    }));
+  }, { PUBLIC_AI_MAX_CONCURRENT: "1" });
+  const { token } = await f.session();
+  const send = () => f.post("/api/ai/v1/chat/completions", { messages: [{ role: "user", content: "空席は？" }] }, token);
+  const first = await send();
+  const burst = Array.from({ length: 17 }, send);
+  try {
+    const overflow = await Promise.race(burst);
+    assert.equal(overflow.status, 429);
+    assert.equal(overflow.headers.get("Retry-After"), "3");
+    assert.equal(forwarded, 1);
+  } finally { finish(); }
+  await first.text();
+  const responses = await Promise.all(burst);
+  assert.equal(responses.filter(r => r.ok).length, 16);
+  await Promise.all(responses.map(r => r.text()));
+  assert.equal(forwarded, 17);
+});

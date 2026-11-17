@@ -61,6 +61,33 @@ export function publicAi({ env = process.env, fetch: fetchImpl = globalThis.fetc
     try { const value = JSON.parse(Buffer.from(text, "base64url").toString()); return value.expires > now() && typeof value.sid === "string" ? value : undefined; } catch { return; }
   };
   let backend = state, active = 0, liveActive = 0;
+  const maxConcurrent = limit("PUBLIC_AI_MAX_CONCURRENT", 4);
+  const waiting = new Set<() => void>();
+  const busy = () => failure(429, tr("AIが混み合っています。少し待ってからお試しください。"));
+  const acquire = async (res: ServerResponse) => {
+    if (res.destroyed) throw failure(499, "Client disconnected");
+    if (active < maxConcurrent) { active++; return; }
+    const rejectBusy = () => { res.setHeader("Retry-After", "3"); return busy(); };
+    if (waiting.size >= 16) throw rejectBusy();
+    // A released slot passes directly to the oldest connected waiter.
+    await new Promise<void>((resolve, reject) => {
+      const cleanup = () => {
+        waiting.delete(admit);
+        clearTimeout(timer);
+        res.off("close", cancel);
+      };
+      const admit = () => { cleanup(); resolve(); };
+      const cancel = () => { cleanup(); reject(failure(499, "Client disconnected")); };
+      const timer = setTimeout(() => { cleanup(); reject(rejectBusy()); }, 30_000);
+      res.once("close", cancel);
+      waiting.add(admit);
+    });
+  };
+  const release = () => {
+    const next = waiting.values().next().value;
+    if (next) next();
+    else active--;
+  };
   const data = () => backend ||= firestoreAiState();
   const body = async (req: IncomingMessage, maximum = 512 * 1024) => {
     if (!/^application\/json(?:\s*;|$)/i.test(req.headers["content-type"] || "")) throw failure(415, tr("JSONで送信してください。"));
@@ -119,8 +146,7 @@ export function publicAi({ env = process.env, fetch: fetchImpl = globalThis.fetc
           if (!allowedOrigins.includes(requestOrigin)) throw failure(403, tr("このサイトからAIを利用してください。"));
           const parsed = finderRoutingInputSchema.safeParse(await body(req, 128 * 1024));
           if (!parsed.success || new Set(parsed.data.shops.map(shop => shop.id)).size !== parsed.data.shops.length) throw failure(400, tr("メッセージの形式を確認してください。"));
-          if (active >= 2) throw failure(429, tr("AIが混み合っています。少し待ってからお試しください。"));
-          active++;
+          await acquire(res);
           const controller = new AbortController();
           res.once("close", () => { if (!res.writableFinished) controller.abort(); });
           try {
@@ -130,15 +156,14 @@ export function publicAi({ env = process.env, fetch: fetchImpl = globalThis.fetc
               { id: hash(`session:${hour}:${session.sid}`), limit: 120, expiresAt: new Date((hour + 2) * 3600000) },
             ]);
             json(200, await decideFinderRoute(parsed.data, { apiKey: key, fetch: fetchImpl, signal: controller.signal }));
-          } finally { active--; }
+          } finally { release(); }
           return true;
         }
         if (path !== "/api/ai/v1/chat/completions" || req.method !== "POST") throw failure(404, tr("見つかりません。"));
         if (!allowedOrigins.includes(requestOrigin)) throw failure(403, tr("このサイトからAIを利用してください。"));
         const input = await body(req);
         if (!input || !Array.isArray(input.messages) || !input.messages.length || input.messages.length > 160 || input.messages.some((m: any) => !m || typeof m !== "object") || input.tools && (!Array.isArray(input.tools) || input.tools.length > 128)) throw failure(400, tr("メッセージの形式を確認してください。"));
-        if (active >= 2) { res.setHeader("Retry-After", "3"); throw failure(429, tr("AIが混み合っています。少し待ってからお試しください。")); }
-        active++;
+        await acquire(res);
         const started = Date.now();
         if (env.PUBLIC_AI_LOG === "true") console.info(JSON.stringify({ event: "public_ai_start", model, messages: input.messages.length, tools: input.tools?.length || 0 }));
         const controller = new AbortController(), timer = setTimeout(() => controller.abort(), 120000);
@@ -210,8 +235,9 @@ export function publicAi({ env = process.env, fetch: fetchImpl = globalThis.fetc
           phase = "remember";
           await data().write([...completed.values()].filter(c => c.id).map(c => ({ id: hash(`sig:${session.sid}:${c.id}`), value: { extra: c.extra_content || null, callHash: callHash(c), expiresAt: new Date(now() + 7 * 86400000) } })));
           await forward(tail, true); res.end();
-        } finally { clearTimeout(timer); controller.abort(); active--; if (env.PUBLIC_AI_LOG === "true") console.info(JSON.stringify({ event: "public_ai_end", phase, finished: res.writableFinished, ms: Date.now() - started })); }
+        } finally { clearTimeout(timer); controller.abort(); release(); if (env.PUBLIC_AI_LOG === "true") console.info(JSON.stringify({ event: "public_ai_end", phase, finished: res.writableFinished, ms: Date.now() - started })); }
       } catch (error) {
+        if (res.destroyed) return true;
         if (!(error as { status?: number }).status) console.error(JSON.stringify({ event: "public_ai_failure", phase, error: (error as Error).name, at: (error as Error).stack?.split("\n").slice(1, 4).map(line => line.trim()) }));
         if (res.headersSent) res.destroy();
         else json((error as { status?: number }).status || 502, { error: (error as { status?: number }).status ? (error as Error).message : tr("AIの応答を取得できませんでした。少し待ってからお試しください。") });

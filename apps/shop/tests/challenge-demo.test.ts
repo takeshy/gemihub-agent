@@ -20,11 +20,17 @@ test("recovered four-store demo serves pages/photos/current agents and keeps man
     req.on("error", reject); req.end(data === undefined ? undefined : JSON.stringify(data));
   });
   assert.deepEqual((await call("/healthz")).json, { ok: true, shops: ["akari", "trattoria-sole", "kanton-ryu", "komado"] });
-  const names = { akari: "炉端 灯", "trattoria-sole": "トラットリア ソーレ", "kanton-ryu": "広東 龍", komado: "こまど" };
-  for (const [slug, name] of Object.entries(names)) {
+  const storefronts = {
+    akari: { name: "炉端 灯", heading: "炭火のコースと一品", detail: "同じ厨房でえびを扱います。" },
+    "trattoria-sole": { name: "トラットリア ソーレ", heading: "薪窯から、テーブルへ", detail: "小麦粉・トマト・モッツァレラ・バジル" },
+    "kanton-ryu": { name: "広東 龍", heading: "円卓を囲むコース", detail: "4〜16名様" },
+    komado: { name: "こまど", heading: "店頭に並ぶもの", detail: "土曜 12:00〜21:00" },
+  };
+  for (const [slug, { name, heading, detail }] of Object.entries(storefronts)) {
     const page = await call(`/s/${slug}/`);
-    assert.equal(page.status, 200); assert.ok(page.body.toString().includes(name));
-    assert.ok(page.body.toString().includes("架空"));
+    const html = page.body.toString();
+    assert.equal(page.status, 200);
+    for (const text of [name, heading, detail, "架空"]) assert.ok(html.includes(text), `${slug}: ${text}`);
     const photo = await call(`/s/${slug}/demo-photo.webp`);
     assert.equal(photo.status, 200); assert.equal(photo.headers["content-type"], "image/webp");
     assert.deepEqual(photo.body, await readFile(new URL(`../../../infra/dev/challenge-assets/${slug}.webp`, import.meta.url)));
@@ -36,10 +42,11 @@ test("recovered four-store demo serves pages/photos/current agents and keeps man
     assert.ok(tools.length > 0); assert.ok(tools.every((tool: any) => tool.annotations?.readOnlyHint === true));
     const info = (await rpc("tools/call", { name: "get_shop_info", arguments: {} })).json;
     assert.ok(JSON.stringify(info).includes(name));
-    assert.match(page.body.toString(), /id="assistant-toggle"/);
+    assert.match(html, /id="assistant-toggle"/);
     assert.match((await call(`/s/${slug}/agent/site.js`)).body.toString(), /voice-bridge/);
     assert.equal((await call(`/s/${slug}/agent/voice-bridge.js`)).status, 200);
     if (slug === "komado") {
+      assert.doesNotMatch(html, /id="reserve-form"/);
       assert.equal(manifest.json.networks[0].name, "shop_guide");
       assert.deepEqual(info.result.structuredContent.products, ["作家の器", "手帳", "紙雑貨", "贈り物用の文具"]);
       assert.equal((await call(`/s/${slug}/agent/shop_guide.network.json`)).status, 200);

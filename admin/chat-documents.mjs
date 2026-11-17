@@ -8,6 +8,15 @@ export const MAX_DOCUMENT_BYTES = 5 * 1024 * 1024;
 export const MAX_DOCUMENT_TEXT = 100000;
 const hash = bytes => createHash("sha256").update(bytes || "").digest("hex");
 const optional = async path => { try { return await readFile(path); } catch (e) { if (e.code === "ENOENT") return null; throw e; } };
+function fileBytes(data) {
+  if (typeof data !== "string" || data.length > Math.ceil(MAX_DOCUMENT_BYTES / 3) * 4) fail(413, "資料は1ファイル5MB以内にしてください。");
+  const bytes = Buffer.from(data, "base64");
+  if (!bytes.length || bytes.length > MAX_DOCUMENT_BYTES || bytes.toString("base64") !== data) fail(400, "資料を読み込めませんでした。");
+  return bytes;
+}
+function validatePdf(bytes) {
+  if (bytes.subarray(0, 5).toString() !== "%PDF-") fail(400, "PDFの形式を確認してください。");
+}
 function name(value) {
   if (typeof value !== "string" || !value.trim() || value.length > 255 || /[\x00-\x1f\x7f/\\]/.test(value)) fail(400, "資料名を確認してください。");
   return value.trim();
@@ -21,12 +30,10 @@ export function createDocumentImporter({ apiKey = "", model = process.env.GEMINI
   return async input => {
     if (!input || typeof input !== "object" || Array.isArray(input) || Object.keys(input).some(k => !["name", "data"].includes(k))) fail(400, "資料の形式を確認してください。");
     const filename = name(input.name);
-    if (typeof input.data !== "string" || input.data.length > Math.ceil(MAX_DOCUMENT_BYTES / 3) * 4) fail(413, "資料は1ファイル5MB以内にしてください。");
-    const bytes = Buffer.from(input.data, "base64");
-    if (!bytes.length || bytes.length > MAX_DOCUMENT_BYTES || bytes.toString("base64") !== input.data) fail(400, "資料を読み込めませんでした。");
+    const bytes = fileBytes(input.data);
     let content;
     if (/\.pdf$/i.test(filename)) {
-      if (bytes.subarray(0, 5).toString() !== "%PDF-") fail(400, "PDFの形式を確認してください。");
+      validatePdf(bytes);
       if (!apiKey) fail(503, "PDFの読み取りには運営のGemini設定が必要です。テキスト形式でもアップロードできます。");
       try {
         const response = await fetchImpl(`https://generativelanguage.googleapis.com/v1beta/models/${encodeURIComponent(model)}:generateContent`, {
@@ -59,38 +66,57 @@ export function createChatDocuments({ root, write = atomicWrite } = {}) {
     const bytes = await optional(privatePath);
     return { documents: bytes ? JSON.parse(bytes).documents : [], revision: hash(bytes) };
   }
+  const summarize = ({ documents, revision }) => ({
+    documents: documents.map(({ pdf, ...doc }) => pdf ? { ...doc, hasPdf: true } : doc),
+    revision,
+  });
+  const pdfPath = id => join(root, "site/chat-document-files", id + ".pdf");
   async function change(revision, mutate) {
     const current = await read();
     if (typeof revision !== "string" || revision !== current.revision) fail(409, "資料が別の操作で更新されました。一覧を読み直し、本文を確認し直してください。");
     const documents = mutate(current.documents);
     if (documents.length > 50 || documents.reduce((sum, doc) => sum + doc.text.length, 0) > 2000000) fail(400, "資料は合計50件・200万文字までです。不要な資料を削除してください。");
-    const published = documents.filter(doc => doc.published).map(({ id, name, text, updatedAt }) => ({ id, name, text, updatedAt }));
-    const before = await Promise.all([optional(privatePath), optional(publicPath)]);
-    const files = [privatePath, publicPath];
+    if (documents.reduce((sum, doc) => sum + (doc.pdf?.length || 0), 0) > 35 * 1024 * 1024) fail(400, "PDFの保管上限に達しました。不要な資料を削除してください。");
+    const published = documents.filter(doc => doc.published);
+    const oldPdfs = new Map(current.documents.filter(doc => doc.published && doc.pdf).map(doc => [doc.id, doc.pdf]));
+    const newPdfs = new Map(published.filter(doc => doc.pdf).map(doc => [doc.id, doc.pdf]));
+    const files = [
+      ...[...oldPdfs.keys()].filter(id => !newPdfs.has(id)).map(id => ({ path: pdfPath(id), data: null, mode: 0o644 })),
+      { path: privatePath, data: JSON.stringify({ version: 1, documents }) + "\n", mode: 0o600 },
+      { path: publicPath, data: JSON.stringify({ version: 1, documents: published.map(({ id, name, text, updatedAt, pdf }) => ({ id, name, text, updatedAt, ...(pdf && { hasPdf: true }) })) }) + "\n", mode: 0o644 },
+      ...[...newPdfs].filter(([id, pdf]) => pdf !== oldPdfs.get(id)).map(([id, pdf]) => ({ path: pdfPath(id), data: Buffer.from(pdf, "base64"), mode: 0o644 })),
+    ];
+    const before = await Promise.all(files.map(({ path }) => optional(path)));
     let attempted = -1;
     try {
-      for (const [i, data] of [JSON.stringify({ version: 1, documents }), JSON.stringify({ version: 1, documents: published })].entries()) {
+      for (const [i, { path, data, mode }] of files.entries()) {
         attempted = i;
-        await write(files[i], data + "\n", { mode: i === 0 ? 0o600 : 0o644 });
+        if (data === null) await rm(path, { force: true });
+        else await write(path, data, { mode });
       }
     } catch (error) {
       for (let i = attempted; i >= 0; i--) {
-        if (before[i] === null) await rm(files[i], { force: true });
-        else await atomicWrite(files[i], before[i], { mode: i === 0 ? 0o600 : 0o644 });
+        const { path, mode } = files[i];
+        if (before[i] === null) await rm(path, { force: true });
+        else await atomicWrite(path, before[i], { mode });
       }
       throw error;
     }
-    return read();
+    return summarize(await read());
   }
   return {
-    get: () => exclusive(read),
+    get: () => exclusive(async () => summarize(await read())),
     save: input => exclusive(() => {
-      if (!input || typeof input !== "object" || Array.isArray(input) || Object.keys(input).some(k => !["id", "name", "text", "published", "revision"].includes(k)) || typeof input.published !== "boolean") fail(400, "資料の保存内容を確認してください。");
+      if (!input || typeof input !== "object" || Array.isArray(input) || Object.keys(input).some(k => !["id", "name", "text", "published", "revision", "pdf"].includes(k)) || typeof input.published !== "boolean") fail(400, "資料の保存内容を確認してください。");
       const item = { name: name(input.name), text: text(input.text), published: input.published, updatedAt: new Date().toISOString() };
+      if (input.pdf !== undefined) {
+        validatePdf(fileBytes(input.pdf));
+        item.pdf = input.pdf;
+      }
       return change(input.revision, documents => {
         if (input.id !== undefined && !documents.some(doc => doc.id === input.id)) fail(404, "資料が見つかりません。");
         if (documents.some(doc => doc.id !== input.id && doc.name === item.name)) fail(400, "同じ名前の資料があります。一覧から編集するか、資料名を変えてください。");
-        return input.id ? documents.map(doc => doc.id === input.id ? { ...item, id: doc.id } : doc) : [...documents, { ...item, id: randomUUID() }];
+        return input.id ? documents.map(doc => doc.id === input.id ? { ...doc, ...item } : doc) : [...documents, { ...item, id: randomUUID() }];
       });
     }),
     delete: (id, revision) => exclusive(() => change(revision, documents => {

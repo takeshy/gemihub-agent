@@ -4,12 +4,14 @@ export async function mountChatDocuments({ api, run }) {
   let state = await api("/api/chat-documents");
   // Saves send the revision of the latest list this page has seen. This page's own unpublish or delete
   // updates it, so they do not block the open draft; a change from another tab still returns 409.
-  let editingId, editingBase;
+  let editingId, editingBase, pendingPdf;
   const status = text => { $("documents-status").textContent = text; };
   function edit(doc) {
+    pendingPdf = undefined;
     editingId = doc.id; editingBase = { name: doc.name, text: doc.text };
     $("document-name").value = doc.name;
     $("document-text").value = doc.text;
+    $("document-pdf-note").hidden = !doc.hasPdf;
     $("document-preview").hidden = false;
     $("document-preview").querySelector('button[value="draft"]').textContent = doc.published ? "公開をやめて下書き保存" : "下書きを保存";
     status(doc.published ? "公開中の資料です。本文を変更したら「公開する」で反映します。" : "本文を確認・修正してから公開してください。まだチャットには使われません。");
@@ -27,7 +29,7 @@ export async function mountChatDocuments({ api, run }) {
     for (const doc of state.documents) {
       const item = node("li"); item.className = "document-item";
       const details = node("div");
-      details.append(node("strong", doc.name), node("p", `${doc.published ? "公開中" : "下書き"} · ${doc.text.length.toLocaleString()}文字`));
+      details.append(node("strong", doc.name), node("p", `${doc.published ? "公開中" : "下書き"} · ${doc.text.length.toLocaleString()}文字${doc.hasPdf ? " · PDFあり" : ""}`));
       const actions = node("div"); actions.className = "document-actions";
       actions.append(button("本文を確認", () => edit(doc)));
       if (doc.published) actions.append(button("公開をやめる", async () => {
@@ -58,7 +60,9 @@ export async function mountChatDocuments({ api, run }) {
           const reader = new FileReader(); reader.onload = () => resolve(String(reader.result).split(",")[1]); reader.onerror = () => reject(new Error("ファイルを読み込めませんでした。")); reader.readAsDataURL(file);
         });
         const doc = await api("/api/chat-documents/import", "POST", { name: file.name, data });
-        edit(doc);
+        const isPdf = /\.pdf$/i.test(file.name);
+        edit({ ...doc, hasPdf: isPdf });
+        if (isPdf) pendingPdf = data;
       } catch (error) { status(error.message); }
     });
   });
@@ -70,12 +74,12 @@ export async function mountChatDocuments({ api, run }) {
         // The list may have been reloaded after another tab changed this document: do not overwrite it.
         const current = state.documents.find(doc => doc.id === editingId);
         if (editingId && (!current || current.name !== editingBase.name || current.text !== editingBase.text)) throw new Error("この資料は別の画面で変更または削除されました。「一覧を読み直す」から開き直してください。");
-        state = await api("/api/chat-documents", "PUT", { id: editingId, name: $("document-name").value, text: $("document-text").value, published, revision: state.revision });
-        $("document-preview").hidden = true; $("document-file").value = ""; editingId = undefined;
+        state = await api("/api/chat-documents", "PUT", { id: editingId, name: $("document-name").value, text: $("document-text").value, published, revision: state.revision, pdf: pendingPdf });
+        $("document-preview").hidden = true; $("document-file").value = ""; editingId = undefined; pendingPdf = undefined;
         render(); status(published ? "公開しました。チャットで資料をもとに回答できます。" : "下書きを保存しました。チャットには使われません。");
       } catch (error) { status(error.message); }
     });
   });
-  $("document-cancel").addEventListener("click", () => { $("document-preview").hidden = true; editingId = undefined; status("編集を閉じました。"); });
+  $("document-cancel").addEventListener("click", () => { $("document-preview").hidden = true; editingId = undefined; pendingPdf = undefined; status("編集を閉じました。"); });
   render(); $("chat-documents").hidden = false;
 }

@@ -4,6 +4,7 @@ node_modules/
 !.env.example
 test-results/
 tmp/
+/output/
 admin/cache.json
 admin/cache.json.*.tmp
 admin/auth.json
@@ -17,3 +18,4 @@ admin/chat-documents.json
 admin/chat-documents.json.*.tmp
 site/chat-documents.json
 site/chat-documents.json.*.tmp
+site/chat-document-files/

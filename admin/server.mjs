@@ -73,7 +73,7 @@ export function createAdminServer({ root = process.env.PARENT_ROOT || fileURLToP
       if (url.pathname.startsWith("/api/") && !user) return send(401, { error: "運営者としてGoogleにログインしてください" });
       if (req.method === "GET" && url.pathname === "/api/chat-documents") return send(200, await chatDocuments.get());
       if (req.method === "POST" && url.pathname === "/api/chat-documents/import") return send(200, await importDocument(await body(req, 8 * 1024 * 1024)));
-      if (req.method === "PUT" && url.pathname === "/api/chat-documents") return send(200, await chatDocuments.save(await body(req)));
+      if (req.method === "PUT" && url.pathname === "/api/chat-documents") return send(200, await chatDocuments.save(await body(req, 8 * 1024 * 1024)));
       const documentMatch = url.pathname.match(/^\/api\/chat-documents\/([a-f0-9-]{36})$/);
       if (req.method === "DELETE" && documentMatch) return send(200, await chatDocuments.delete(documentMatch[1], req.headers["if-match"]));
       if (req.method === "GET" && url.pathname === "/api/site/images") return send(200, await siteImages.list());

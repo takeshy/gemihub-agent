@@ -11,6 +11,7 @@ import { LlmRelay } from "./llm-relay.js";
 import { aiConnection, mountAiConnection } from "./ai-connection.js";
 import { GuideVoice } from "./voice-chat.js";
 import { GUIDE_GREETING, guideGreeting } from "./guide-copy.js";
+import { mountDocumentPreview } from "./chat-documents.js";
 
 /**
  * Boots the browser runtime in the page's assistant section.
@@ -93,6 +94,7 @@ export class AssistantMount {
       });
       AssistantMount.engine = booted.engine;
       AssistantMount.mountChatControls();
+      mountDocumentPreview(document.getElementById("ns-msgs"));
       AssistantMount.defaultReview = booted.engine.onActionConfirm;
       booted.engine.onActionConfirm = AssistantMount.review;
       App.inquiries = new ShopInquiries(() => App.page, reviewShopInquiries,

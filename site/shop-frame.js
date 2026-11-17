@@ -73,6 +73,11 @@ export class ShopFrame {
   post(message) {
     if (this.shop) this.element("shop-page-frame").contentWindow?.postMessage(message, new URL(this.shop.pageUrl).origin);
   }
+  setVoicePanelOpen(open) {
+    if (this.voicePanelOpen === open) return;
+    this.voicePanelOpen = open;
+    this.post({ type: "gemihub:voice-panel", shop: this.shop?.id, open });
+  }
   open(id, { target = "shop", courseId } = {}) {
     const shop = typeof id === "string" ? this.find(id) : null;
     if (!shop || !["shop", "reserve"].includes(target)) {
@@ -135,7 +140,7 @@ export class ShopFrame {
     if (!fromShopFrame(event, frame.contentWindow, this.shop)) return;
     const data = event.data;
     if (data.shop === this.shop.id) {
-      if (data.type === "gemihub:voice-capabilities") { this.post({ type: "gemihub:voice-capabilities", shop: this.shop.id, available: typeof this.onVoiceOpen === "function" }); return; }
+      if (data.type === "gemihub:voice-capabilities") { this.post({ type: "gemihub:voice-capabilities", shop: this.shop.id, available: typeof this.onVoiceOpen === "function", panelOpen: this.voicePanelOpen === true }); return; }
       if (data.type === "gemihub:voice-open") { if (navigator.userActivation?.isActive) this.onVoiceOpen?.(); return; }
     }
     const pending = this.voicePending;

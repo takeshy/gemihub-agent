@@ -122,6 +122,7 @@ try {
     assert.equal(await page.evaluate(async () => !!(await import("./script.js")).App.voice.stream), false, "loading the page does not start the microphone");
     await page.locator("#voice-open").click();
     await expect(page.locator("#finder-voice")).toBeVisible();
+    await expect(page.locator("#voice-open")).not.toBeVisible();
     assert.equal(await page.locator("#finder-voice").evaluate(panel => panel.matches(":modal")), false);
     const dockedPanel = await page.locator("#finder-voice").boundingBox();
     assert.ok(width - dockedPanel.x - dockedPanel.width <= 24 && 900 - dockedPanel.y - dockedPanel.height <= 24, "voice panel is docked at the bottom right");
@@ -148,6 +149,8 @@ try {
     emitQuestion("営業時間と扱う品を教えてください");
     await expect(page.locator("#voice-spoken")).toContainText("作家の器と手帳", { timeout: 20000 });
     const retailFrame = page.frameLocator("#shop-page-frame");
+    await expect(retailFrame.locator("#voice-open")).toBeAttached();
+    await expect(retailFrame.locator("#voice-open")).not.toBeVisible();
     await expect(retailFrame.locator("#ns-msgs")).toContainText("土曜12時から21時");
     await expect(retailFrame.locator("#ns-input")).toHaveAttribute("placeholder", await retailFrame.locator("html").getAttribute("lang") === "en" ? "Ask about hours or products…" : "営業時間や扱っている品について相談…");
     assert.equal(await retailFrame.locator("#reserve-form").count(), 0);
@@ -182,6 +185,7 @@ try {
     await expect.poll(() => voiceResults.at(-1)?.target).toBe("地域の案内");
     await page.locator("#voice-close").click();
     await expect(page.locator("#finder-voice")).not.toBeVisible();
+    await expect(page.locator("#voice-open")).toBeVisible();
     await expect(page.locator("#voice-open")).toBeFocused();
     assert.equal(await page.evaluate(async () => (await import("./script.js")).App.voice.stream), null);
     await page.evaluate(async()=>{const{App}=await import("./script.js");App.shopFrame.open("komado");});
@@ -198,9 +202,11 @@ try {
     await page.screenshot({path:join(codeRoot,`test-results/voice/embedded-entry-${width}.png`)});
     await embedded.locator("#assistant #voice-open").click();
     await expect(page.locator("#voice-start")).toHaveText("■ 音声を終了");
+    await expect(embedded.locator("#voice-open")).not.toBeVisible();
     await expect(page.locator("#voice-target")).toHaveValue("komado");
     await page.keyboard.press("Escape");
     await expect(page.locator("#finder-voice")).not.toBeVisible();
+    await expect(embedded.locator("#voice-open")).toBeVisible();
     assert.equal(await page.evaluate(async () => { const voice=(await import("./script.js")).App.voice; return !voice.stream && !voice.ws && !voice.input && !voice.output; }), true, "closing the dialog stops microphone, connection and audio contexts");
     await embedded.locator("#assistant-close").click();
     await expect(embedded.locator("#voice-open")).not.toBeVisible();
@@ -222,6 +228,7 @@ try {
       await launcher.click();
       const english=await standalone.locator("html").getAttribute("lang")==="en";
       await expect(standalone.locator("#voice-start")).toHaveText(english?"■ End voice":"■ 音声を終了");
+      await expect(launcher).not.toBeVisible();
       assert.equal(await standalone.locator("#finder-voice").evaluate(panel => panel.matches(":modal")), false);
       await standalone.locator("#ns-input").fill("Voice leaves chat usable");
       await expect(standalone.locator("#ns-input")).toBeFocused();
@@ -248,6 +255,7 @@ try {
       await standalone.screenshot({path:join(codeRoot,`test-results/voice/standalone-${slug}-${width}.png`),fullPage:true});
       await standalone.locator("#voice-close").click();
       await expect(standalone.locator("#finder-voice")).not.toBeVisible();
+      await expect(launcher).toBeVisible();
       await expect(launcher).toBeFocused();
       await standalone.close();
     }

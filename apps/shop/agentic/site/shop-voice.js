@@ -32,9 +32,13 @@ export function mountEmbeddedShopVoice() {
   const button = document.createElement("button"); button.id = "voice-open"; button.type = "button"; button.className = "finder-voice-launcher";
   button.textContent = document.documentElement.lang === "en" ? "🎙 Talk to AI" : "🎙 音声で話す";
   button.setAttribute("aria-haspopup", "dialog"); host.append(button);
+  let available = false, panelOpen = false;
   window.addEventListener("message", event => {
-    if (event.source !== window.parent || event.origin !== origin || event.data?.type !== "gemihub:voice-capabilities" || event.data.shop !== shop) return;
-    host.hidden = event.data.available !== true;
+    if (event.source !== window.parent || event.origin !== origin || event.data?.shop !== shop) return;
+    if (event.data.type === "gemihub:voice-capabilities") { available = event.data.available === true; panelOpen = event.data.panelOpen === true; }
+    else if (event.data.type === "gemihub:voice-panel") panelOpen = event.data.open === true;
+    else return;
+    host.hidden = !available || panelOpen;
   });
   button.addEventListener("click", () => window.parent.postMessage({ type: "gemihub:voice-open", shop }, origin));
   window.parent.postMessage({ type: "gemihub:voice-capabilities", shop }, origin);

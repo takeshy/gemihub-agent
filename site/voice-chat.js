@@ -34,6 +34,7 @@ export class GuideVoice {
       launcherHost = node("div"); launcherHost.className = "finder-voice-entry";
       document.querySelector("#agent-app .ns-header .ns-title").after(launcherHost);
     }
+    this.launcherHost = launcherHost;
     panel.append(header, mode, row, this.status, this.heard, this.spoken); launcherHost.append(this.launcher); document.body.append(panel);
     this.launcher.addEventListener("click", () => this.open());
     close.addEventListener("click", () => panel.close());
@@ -59,6 +60,9 @@ export class GuideVoice {
   }
   words(ja, en) { return this.english ? en : ja; }
   updateSpace() {
+    const panelOpen = this.dialog.open || this.reviewing;
+    this.launcherHost.hidden = !!panelOpen;
+    this.shopFrame.setVoicePanelOpen?.(!!panelOpen);
     document.body.classList.toggle("has-finder-voice", this.dialog.open);
     document.body.style.setProperty("--finder-voice-height", `${this.dialog.open ? Math.ceil(this.dialog.getBoundingClientRect().height) : 0}px`);
   }
@@ -88,6 +92,7 @@ export class GuideVoice {
   stop(message) {
     this.generation++; clearTimeout(this.connectionTimer); this.state = "off";
     this.reviewing = false;
+    if (this.dialog) this.updateSpace();
     if (this.launcher) this.launcher.textContent = this.words("🎙 音声で話す", "🎙 Talk to AI");
     const ws = this.ws; this.ws = null; ws?.close(); this.cancelQuestions(); this.silence();
     this.stream?.getTracks().forEach(track => track.stop()); this.stream = null;

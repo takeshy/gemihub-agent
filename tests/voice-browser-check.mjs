@@ -17,6 +17,7 @@ let finder, shop, store, browser, liveParameters;
 const textCalls = [], voiceResults = [], frames = [], errors = [], shopRequests = [];
 let finderOrigin, shopOrigin, ended = 0;
 const serverKey = "fixture-server-key-not-public";
+let releaseReview;
 const fixtureProvider = async (_url, options) => {
   const body = JSON.parse(options.body); textCalls.push(body);
   const receipts = body.messages.filter(message => message.role === "tool");
@@ -30,6 +31,7 @@ const fixtureProvider = async (_url, options) => {
     else if (latest.includes("灯")) delta = { content: "炉端 灯を開きました。お店とお話しください。" };
     else { const result = JSON.parse(receipts.at(-1).content).result; assert.equal(result.results[0].source, "図書館の利用案内.md"); delta = { content: "図書館は午前9時開館です。資料: 図書館の利用案内.md" }; }
   } else {
+    if (latest === "確認画面を見てから回答して" && !receipts.length) await new Promise(resolve => { releaseReview = resolve; });
     // This is the selected shop's real assistant, loaded in its own frame with its own tools.
     if (body.tools.some(tool => tool.function.name === "website_get_reservation_page_state")) {
       delta = receipts.length ? { content: "炉端 灯です。席のみの予約も受け付けています。" } : tool("website_get_reservation_page_state", {});
@@ -93,8 +95,12 @@ try {
     const page = await context.newPage(); page.on("pageerror", error => errors.push(error.message));
     page.on("console", message => { if (message.type() === "error") console.error(message.text().slice(0, 300)); });
     page.on("request", request => { if (request.url().startsWith(shopOrigin)) shopRequests.push({ url: request.url(), body: request.postData(), headers: request.headers() }); });
-    await page.goto(finderOrigin); await expect(page.locator("#voice-start")).toBeVisible();
-    await page.locator("#voice-start").click();
+    await page.goto(finderOrigin); await expect(page.locator("#voice-open")).toBeVisible();
+    await expect(page.locator("#finder-voice")).not.toBeVisible();
+    assert.equal(await page.evaluate(async () => !!(await import("./script.js")).App.voice.stream), false, "loading the page does not start the microphone");
+    await page.locator("#voice-open").click();
+    await expect(page.locator("#finder-voice")).toBeVisible();
+    await expect(page.locator(".finder-voice-mode")).toHaveText("音声モード");
     try { await expect(page.locator("#voice-start")).toHaveText("■ 音声を終了"); }
     catch (error) { console.error("Voice status:", await page.locator("#voice-status").textContent(), "Live connected:", !!liveParameters); throw error; }
     await expect.poll(() => frames.length).toBeGreaterThan(0);
@@ -117,6 +123,20 @@ try {
     await expect(retailFrame.locator("#ns-input")).toHaveAttribute("placeholder", await retailFrame.locator("html").getAttribute("lang") === "en" ? "Ask about hours or products…" : "営業時間や扱っている品について相談…");
     assert.equal(await retailFrame.locator("#reserve-form").count(), 0);
     assert.equal(await retailFrame.locator("html").getAttribute("data-agent-kind"), "shop");
+    const repliesBeforeReview=voiceResults.length;
+    emitQuestion("確認画面を見てから回答して");
+    await expect.poll(() => typeof releaseReview).toBe("function");
+    await retailFrame.locator("body").evaluate(body => {
+      const dialog=document.createElement("dialog"); dialog.id="voice-review-fixture";
+      const button=document.createElement("button"); button.textContent="確認を終える"; button.onclick=()=>dialog.close(); dialog.append(button); body.append(dialog); dialog.showModal();
+    });
+    await expect(page.locator("#finder-voice")).not.toBeVisible();
+    assert.equal(await page.evaluate(async () => !!(await import("./script.js")).App.voice.stream), true, "review does not stop the active voice session");
+    await retailFrame.getByRole("button",{name:"確認を終える",exact:true}).click();
+    await expect(page.locator("#finder-voice")).toBeVisible();
+    releaseReview(); releaseReview=undefined;
+    await expect.poll(() => voiceResults.length).toBeGreaterThan(repliesBeforeReview);
+    assert.match(voiceResults.at(-1).answer,/作家の器と手帳/);
     const callsBeforeForgery = textCalls.length;
     await page.evaluate(origin => document.getElementById("shop-page-frame").contentWindow.postMessage({ type: "gemihub:voice-question", channel: "forged", id: "forged", question: "must be ignored" }, origin), shopOrigin);
     await page.waitForTimeout(50);
@@ -127,12 +147,19 @@ try {
     await page.locator("#voice-target").selectOption("");
     emitQuestion("図書館の開館時間を教えて");
     await expect.poll(() => voiceResults.at(-1)?.target).toBe("地域の案内");
-    await page.locator("#voice-start").click(); await expect(page.locator("#voice-start")).toHaveText("🎙 音声で話す");
+    await page.locator("#voice-close").click();
+    await expect(page.locator("#finder-voice")).not.toBeVisible();
+    await expect(page.locator("#voice-open")).toBeFocused();
     assert.equal(await page.evaluate(async () => (await import("./script.js")).App.voice.stream), null);
+    await page.locator("#voice-open").click();
+    await expect(page.locator("#voice-start")).toHaveText("■ 音声を終了");
+    await page.keyboard.press("Escape");
+    await expect(page.locator("#finder-voice")).not.toBeVisible();
+    assert.equal(await page.evaluate(async () => { const voice=(await import("./script.js")).App.voice; return !voice.stream && !voice.ws && !voice.input && !voice.output; }), true, "closing the dialog stops microphone, connection and audio contexts");
     await context.close();
   }
   for (const request of shopRequests) assert.ok(!JSON.stringify(request).includes(serverKey));
-  assert.deepEqual(errors, []); assert.equal(ended, 2);
+  assert.deepEqual(errors, []); assert.equal(ended, 4);
   console.log(`PASS: real microphone PCM/WebSocket, guide document answers, voice-selected restaurant and other-industry shop, read-only shop MCP, shop chat/relay, return to guide and cleanup on desktop/mobile (${frames.length} audio frames, ${voiceResults.length} voice replies)`);
 } finally {
   await browser?.close();

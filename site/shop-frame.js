@@ -137,6 +137,7 @@ export class ShopFrame {
     const pending = this.voicePending;
     if (pending && data.channel === pending.channel && data.shop === this.shop.id) {
       if (data.type === "gemihub:voice-ready") { pending.ready = true; this.post({ type: "gemihub:voice-question", channel: pending.channel, id: pending.id, question: pending.question }); return; }
+      if (data.type === "gemihub:voice-review" && data.id === pending.id && typeof data.open === "boolean") { this.onVoiceReview?.(data.open); return; }
       if (data.type === "gemihub:voice-answer" && data.id === pending.id && typeof data.answer === "string" && data.answer.length <= 20000) { pending.resolve(data.answer); return; }
       if (data.type === "gemihub:voice-error" && data.id === pending.id) { pending.reject(new Error("この店の音声会話に接続できませんでした。店舗ページを確認してください。")); return; }
     }
@@ -179,7 +180,7 @@ export class ShopFrame {
     if (!this.shop || !hasAgent(this.shop) || this.voicePending || typeof question !== "string" || question.length > 4000 || signal?.aborted) return Promise.reject(new Error("お店の会話を準備できませんでした。"));
     return new Promise((resolve, reject) => {
       const channel = `voice-${Date.now()}-${++this.voiceSequence}`, id = channel;
-      const cleanup = () => { clearInterval(retry); clearTimeout(timeout); signal?.removeEventListener("abort", abort); if (this.voicePending?.channel === channel) this.voicePending = null; };
+      const cleanup = () => { clearInterval(retry); clearTimeout(timeout); signal?.removeEventListener("abort", abort); if (this.voicePending?.channel === channel) { this.voicePending = null; this.onVoiceReview?.(false); } };
       const abort = () => { this.post({ type: "gemihub:voice-cancel", channel, id }); cleanup(); reject(new Error("音声の質問を中止しました。")); };
       const pending = { channel, id, question, ready: false, resolve: answer => { cleanup(); resolve(answer); }, reject: error => { cleanup(); reject(error); } };
       this.voicePending = pending;

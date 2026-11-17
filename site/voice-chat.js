@@ -7,8 +7,16 @@ export class GuideVoice {
     if (!config?.voice) return;
     this.english = document.documentElement.lang === "en";
     const node = (tag, text) => { const element = document.createElement(tag); if (text) element.textContent = text; return element; };
-    const panel = node("section"); panel.id = "finder-voice"; panel.className = "finder-voice";
-    panel.setAttribute("aria-label", this.words("音声で相談", "Voice conversation"));
+    this.launcher = node("button", this.words("🎙 音声で話す", "🎙 Talk to AI"));
+    this.launcher.id = "voice-open"; this.launcher.className = "finder-voice-launcher"; this.launcher.type = "button";
+    this.launcher.setAttribute("aria-haspopup", "dialog"); this.launcher.setAttribute("aria-controls", "finder-voice"); this.launcher.setAttribute("aria-expanded", "false");
+    const panel = node("dialog"); this.dialog = panel; panel.id = "finder-voice"; panel.className = "finder-voice";
+    panel.setAttribute("aria-labelledby", "voice-heading");
+    const heading = node("h2", this.words("音声で話す", "Talk to AI")); heading.id = "voice-heading";
+    const close = node("button", "×"); close.id = "voice-close"; close.className = "finder-voice-close"; close.type = "button"; close.autofocus = true;
+    close.setAttribute("aria-label", this.words("閉じる", "Close"));
+    const header = node("div"); header.className = "finder-voice-heading"; header.append(heading, close);
+    const mode = node("p", this.words("音声モード", "Voice mode")); mode.className = "finder-voice-mode";
     const label = node("label", this.words("話し相手", "Talk to")); label.htmlFor = "voice-target";
     this.select = node("select"); this.select.id = "voice-target";
     for (const shop of [{ id: "", name: this.words("地域の案内", "Local guide") }, ...shops.filter(shop => !!shop.networkUrl)]) {
@@ -21,15 +29,26 @@ export class GuideVoice {
     this.spoken = node("p"); this.spoken.id = "voice-spoken";
     this.spoken.setAttribute("aria-live", "polite");
     const row = node("div"); row.className = "finder-voice-controls"; row.append(label, this.button);
-    panel.append(row, this.status, this.heard, this.spoken); document.body.append(panel);
-    document.body.classList.add("has-finder-voice");
-    this.resize = new ResizeObserver(() => document.body.style.setProperty("--finder-voice-height", `${panel.getBoundingClientRect().height}px`)); this.resize.observe(panel);
+    panel.append(header, mode, row, this.status, this.heard, this.spoken); document.body.append(this.launcher, panel);
+    this.launcher.addEventListener("click", () => {
+      if (!panel.open) panel.showModal();
+      this.launcher.setAttribute("aria-expanded", "true");
+      if (this.state === "off") void this.start();
+    });
+    close.addEventListener("click", () => panel.close());
+    panel.addEventListener("close", () => { if (panel.open || this.reviewing) return; this.launcher.setAttribute("aria-expanded", "false"); this.stop(); this.launcher.focus({ preventScroll: true }); });
+    panel.addEventListener("click", event => {
+      if (event.target !== panel) return;
+      const box = panel.getBoundingClientRect();
+      if (event.clientX < box.left || event.clientX > box.right || event.clientY < box.top || event.clientY > box.bottom) panel.close();
+    });
     this.select.addEventListener("change", () => {
       this.cancelQuestions(); this.silence();
       if (this.select.value) shopFrame.open(this.select.value); else shopFrame.close();
       this.updateTarget();
     });
     shopFrame.onChange = () => { for (const [id, controller] of this.pending) if (controller.shop && controller.shop !== shopFrame.shop) this.cancelQuestion(id, controller); this.silence(); this.heard.textContent = this.spoken.textContent = ""; this.updateTarget(); };
+    shopFrame.onVoiceReview = open => this.review(open);
     this.button.addEventListener("click", () => this.state === "off" ? void this.start() : this.stop());
     document.getElementById("ns-newchat")?.addEventListener("click", () => this.stop());
     document.getElementById("ai-settings-open")?.addEventListener("click", () => this.stop());
@@ -37,6 +56,16 @@ export class GuideVoice {
     this.updateTarget();
   }
   words(ja, en) { return this.english ? en : ja; }
+  review(open) {
+    if (open && this.dialog?.open) {
+      this.reviewing = true; this.dialog.close(); this.launcher.setAttribute("aria-expanded", "false");
+      this.launcher.textContent = this.words("🎙 音声会話中・戻る", "🎙 Voice active · Return");
+    } else if (!open && this.reviewing) {
+      this.reviewing = false;
+      this.launcher.textContent = this.words("🎙 音声で話す", "🎙 Talk to AI");
+      if (this.state !== "off") { if (!this.dialog.open) this.dialog.showModal(); this.launcher.setAttribute("aria-expanded", "true"); }
+    }
+  }
   updateTarget() { if (this.select) this.select.value = this.shopFrame.shop?.id || ""; }
   silence() { for (const source of this.playing) { try { source.stop(); } catch { /* Already ended. */ } } this.playing.clear(); this.playAt = 0; }
   cancelQuestion(id, controller) {
@@ -46,6 +75,8 @@ export class GuideVoice {
   cancelQuestions() { for (const [id, controller] of this.pending) this.cancelQuestion(id, controller); }
   stop(message) {
     this.generation++; clearTimeout(this.connectionTimer); this.state = "off";
+    this.reviewing = false;
+    if (this.launcher) this.launcher.textContent = this.words("🎙 音声で話す", "🎙 Talk to AI");
     const ws = this.ws; this.ws = null; ws?.close(); this.cancelQuestions(); this.silence();
     this.stream?.getTracks().forEach(track => track.stop()); this.stream = null;
     void this.input?.close().catch(() => {}); this.input = null;

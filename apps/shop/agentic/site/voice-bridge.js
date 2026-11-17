@@ -31,10 +31,21 @@ export function mountShopVoiceBridge(startAssistant, shop) {
     if (data.type !== "gemihub:voice-question" || typeof data.id !== "string" || data.id.length > 80 || typeof data.question !== "string" || !data.question.trim() || data.question.length > 4000) return;
     if (current) return;
     const request = { id: data.id, controller: new AbortController() }; current = request;
+    // A parent modal makes this entire frame inert. Let the parent uncover the shop's
+    // confirmation while retaining the voice connection, then restore its voice dialog.
+    let reviewing = false;
+    const review = () => {
+      const open = !!document.querySelector('dialog[open], .ns-consent-actions');
+      if (open === reviewing) return;
+      reviewing = open; post({ type: "gemihub:voice-review", id: request.id, open });
+    };
+    const observer = new MutationObserver(review);
+    observer.observe(document.body, { subtree: true, childList: true, attributes: true, attributeFilter: ["open"] });
+    review();
     void runVisibleChatTurn(document, data.question, request.controller.signal).then(answer => {
       if (request.controller.signal.aborted) return;
       post({ type: "gemihub:voice-answer", id: request.id, answer });
-    }).catch(() => post({ type: "gemihub:voice-error", id: request.id })).finally(() => { if (current === request) current = null; });
+    }).catch(() => post({ type: "gemihub:voice-error", id: request.id })).finally(() => { observer.disconnect(); if (reviewing) post({ type: "gemihub:voice-review", id: request.id, open: false }); if (current === request) current = null; });
   });
   window.addEventListener("pagehide", () => current?.controller.abort());
 }

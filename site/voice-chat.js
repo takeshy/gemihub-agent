@@ -30,7 +30,11 @@ export class GuideVoice {
     this.spoken = node("p"); this.spoken.id = "voice-spoken";
     this.spoken.setAttribute("aria-live", "polite");
     const row = node("div"); row.className = "finder-voice-controls"; row.append(label, this.button);
-    panel.append(header, mode, row, this.status, this.heard, this.spoken); (launcherHost || document.body).append(this.launcher); document.body.append(panel);
+    if (!launcherHost) {
+      launcherHost = node("div"); launcherHost.className = "finder-voice-entry";
+      document.querySelector("#agent-app .ns-inputbar").before(launcherHost);
+    }
+    panel.append(header, mode, row, this.status, this.heard, this.spoken); launcherHost.append(this.launcher); document.body.append(panel);
     this.launcher.addEventListener("click", () => this.open());
     close.addEventListener("click", () => panel.close());
     panel.addEventListener("close", () => { if (panel.open || this.reviewing) return; this.launcher.setAttribute("aria-expanded", "false"); this.stop(); this.launcher.focus({ preventScroll: true }); });

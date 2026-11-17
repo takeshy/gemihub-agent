@@ -1,3 +1,4 @@
+import "./dev-site.js";
 import { mountShopDirectory } from "./shop-directory.js";
 import { FinderPage } from "./finder.js";
 import { shops } from "./shop-registry.js";

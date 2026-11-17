@@ -8,6 +8,8 @@
 | https://admin.dev.gemihub.net | 運営管理。許可したGoogleアカウントでログイン |
 | https://shop.dev.gemihub.net | 店舗アプリ。メールリンク／サロンはGoogle |
 
+親の案内ページには「デモサイト」と体験用の説明を表示し、店舗を開いている間もヘッダーに「デモ」を表示する。この表示は `dev.gemihub.net` に限定し、管理画面で変更したページデザインにも適用する。3つのdevホストの全レスポンスには `X-Robots-Tag: noindex, nofollow` を付け、検索エンジンへの掲載を除外する。
+
 ## メモリと保存先
 
 ビルドはCloud Buildで行い、2GBのVMでは実行しない。親・管理・店舗アプリのメモリ上限は1280MiB、審査員用デモは256MiB、HTTPS用Caddyは96MiB。合計1632MiBで、OSなどに約400MiBを残す。Nodeのヒープ上限は親配信48MiB・管理192MiB・店舗512MiB・デモ160MiBで、上記のコンテナ上限にはChromiumなどのメモリも含む。画面撮影は店舗サーバー内で直列化する。2GBのswapは一時的な余裕であり、常用を前提にしない。

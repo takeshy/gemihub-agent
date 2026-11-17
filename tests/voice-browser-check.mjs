@@ -110,6 +110,9 @@ try {
     page.on("console", message => { if (message.type() === "error") console.error(message.text().slice(0, 300)); });
     page.on("request", request => { if (request.url().startsWith(shopOrigin)) shopRequests.push({ url: request.url(), body: request.postData(), headers: request.headers() }); });
     await page.goto(finderOrigin); await expect(page.locator("#voice-open")).toBeVisible();
+    await expect(page.locator("body > .finder-voice-launcher")).toHaveCount(0);
+    assert.equal(await page.locator("#voice-open").evaluate(button => button.closest(".finder-voice-entry").nextElementSibling.classList.contains("ns-inputbar")), true);
+    assert.equal(await page.locator("#voice-open").evaluate(button => getComputedStyle(button).position), "static");
     await expect(page.locator("#finder-voice")).not.toBeVisible();
     assert.equal(await page.evaluate(async () => !!(await import("./script.js")).App.voice.stream), false, "loading the page does not start the microphone");
     await page.locator("#voice-open").click();
@@ -167,6 +170,8 @@ try {
     assert.equal(await page.evaluate(async () => (await import("./script.js")).App.voice.stream), null);
     await page.evaluate(async()=>{const{App}=await import("./script.js");App.shopFrame.open("komado");});
     const embedded=page.frameLocator("#shop-page-frame");
+    await expect(page.locator("#voice-open")).not.toBeVisible();
+    await expect(embedded.locator("#voice-open")).not.toBeVisible();
     await embedded.locator("#assistant-toggle").click();
     await expect(embedded.locator("#assistant #voice-open")).toBeVisible();
     await embedded.locator("#assistant #voice-open").click();
@@ -175,6 +180,9 @@ try {
     await page.keyboard.press("Escape");
     await expect(page.locator("#finder-voice")).not.toBeVisible();
     assert.equal(await page.evaluate(async () => { const voice=(await import("./script.js")).App.voice; return !voice.stream && !voice.ws && !voice.input && !voice.output; }), true, "closing the dialog stops microphone, connection and audio contexts");
+    await embedded.locator("#assistant-close").click();
+    await expect(embedded.locator("#voice-open")).not.toBeVisible();
+    await expect(embedded.locator("#assistant-toggle")).toBeVisible();
     for(const slug of ["komado","akari"]) {
       const standalone=await context.newPage(); standalone.on("pageerror",error=>errors.push(error.message));
       await standalone.goto(`${shopOrigin}/s/${slug}/`);

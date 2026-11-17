@@ -1,5 +1,5 @@
-.finder-voice-launcher { position:fixed; z-index:55; right:16px; bottom:max(16px,env(safe-area-inset-bottom)); max-width:calc(100vw - 32px); padding:12px 18px; border:0; border-radius:999px; color:#fff; background:#28594b; box-shadow:0 4px 20px #0002; font:600 14px/1.5 system-ui,sans-serif; cursor:pointer; }
-body[data-shop-view="open"] > .finder-voice-launcher { left:16px; right:auto; }
+.finder-voice-entry { padding:8px 12px; border-top:1px solid var(--line,#d0d7de); }
+.finder-voice-launcher { position:static; max-width:100%; padding:12px 18px; border:0; border-radius:999px; color:#fff; background:#28594b; font:600 14px/1.5 system-ui,sans-serif; cursor:pointer; }
 .finder-voice { position:fixed; inset:0; margin:auto; width:min(480px,calc(100vw - 32px)); max-height:85dvh; overflow:auto; box-sizing:border-box; padding:24px; background:#fff; color:#253d35; border:1px solid #b9cebc; border-radius:16px; box-shadow:0 12px 48px #0003; font:14px/1.5 system-ui,sans-serif; }
 .finder-voice:not([open]) { display:none; }
 .finder-voice::backdrop { background:#152c2580; }

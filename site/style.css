@@ -22,6 +22,33 @@
 body {
   margin:0;
 }
+.demo-notice {
+  display:flex;
+  flex-wrap:wrap;
+  align-items:center;
+  justify-content:center;
+  gap:4px 16px;
+  padding:12px 20px;
+  border-bottom:1px solid #e4c285;
+  background:#fff3d6;
+  color:#664716;
+  font-size:14px;
+}
+.demo-notice strong,.demo-badge {
+  flex-shrink:0;
+  padding:2px 10px;
+  border:1px solid #bc8737;
+  border-radius:999px;
+  background:#fff3d6;
+  color:#664716;
+  font-size:13px;
+}
+.shop-view-header .demo-badge {
+  margin-left:auto;
+}
+body[data-shop-view="open"] > .demo-notice {
+  display:none;
+}
 button,input,textarea,select {
   font:inherit;
 }

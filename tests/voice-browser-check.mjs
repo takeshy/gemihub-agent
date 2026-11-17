@@ -111,16 +111,28 @@ try {
     page.on("request", request => { if (request.url().startsWith(shopOrigin)) shopRequests.push({ url: request.url(), body: request.postData(), headers: request.headers() }); });
     await page.goto(finderOrigin); await expect(page.locator("#voice-open")).toBeVisible();
     await expect(page.locator("body > .finder-voice-launcher")).toHaveCount(0);
-    assert.equal(await page.locator("#voice-open").evaluate(button => button.closest(".finder-voice-entry").nextElementSibling.classList.contains("ns-inputbar")), true);
+    assert.equal(await page.locator("#voice-open").evaluate(button => button.closest(".finder-voice-entry").previousElementSibling.classList.contains("ns-title")), true);
     assert.equal(await page.locator("#voice-open").evaluate(button => getComputedStyle(button).position), "static");
+    const guideTitle = await page.locator("#agent-app .ns-title").boundingBox();
+    const voiceEntry = await page.locator("#voice-open").boundingBox();
+    assert.ok(voiceEntry.x >= guideTitle.x + guideTitle.width && Math.abs(voiceEntry.y + voiceEntry.height / 2 - guideTitle.y - guideTitle.height / 2) < 2, "voice entry sits beside the guide title");
+    await page.locator("#voice-open").scrollIntoViewIfNeeded();
+    await page.screenshot({ path: join(codeRoot, `test-results/voice/guide-entry-${width}.png`) });
     await expect(page.locator("#finder-voice")).not.toBeVisible();
     assert.equal(await page.evaluate(async () => !!(await import("./script.js")).App.voice.stream), false, "loading the page does not start the microphone");
     await page.locator("#voice-open").click();
     await expect(page.locator("#finder-voice")).toBeVisible();
+    assert.equal(await page.locator("#finder-voice").evaluate(panel => panel.matches(":modal")), false);
+    const dockedPanel = await page.locator("#finder-voice").boundingBox();
+    assert.ok(width - dockedPanel.x - dockedPanel.width <= 24 && 900 - dockedPanel.y - dockedPanel.height <= 24, "voice panel is docked at the bottom right");
     await expect(page.locator(".finder-voice-mode")).toHaveText("音声モード");
     try { await expect(page.locator("#voice-start")).toHaveText("■ 音声を終了"); }
     catch (error) { console.error("Voice status:", await page.locator("#voice-status").textContent(), "Live connected:", !!liveParameters); throw error; }
     await expect.poll(() => frames.length).toBeGreaterThan(0);
+    await page.locator("#ns-input").fill("音声中も文字を入力できます");
+    await expect(page.locator("#ns-input")).toBeFocused();
+    await page.locator("#ns-input").fill("");
+    assert.equal(await page.evaluate(async () => !!(await import("./script.js")).App.voice.stream), true);
     emitQuestion("図書館の開館時間を教えて");
     await expect(page.locator("#voice-spoken")).toContainText("図書館は午前9時");
     await expect(page.locator("#ns-msgs")).toContainText("資料: 図書館の利用案内.md");
@@ -140,6 +152,9 @@ try {
     await expect(retailFrame.locator("#ns-input")).toHaveAttribute("placeholder", await retailFrame.locator("html").getAttribute("lang") === "en" ? "Ask about hours or products…" : "営業時間や扱っている品について相談…");
     assert.equal(await retailFrame.locator("#reserve-form").count(), 0);
     assert.equal(await retailFrame.locator("html").getAttribute("data-agent-kind"), "shop");
+    await retailFrame.locator("#ns-input").fill("お店の画面も操作できます");
+    await expect(retailFrame.locator("#ns-input")).toBeFocused();
+    await retailFrame.locator("#ns-input").fill("");
     const repliesBeforeReview=voiceResults.length;
     emitQuestion("確認画面を見てから回答して");
     await expect.poll(() => typeof releaseReview).toBe("function");
@@ -151,6 +166,7 @@ try {
     assert.equal(await page.evaluate(async () => !!(await import("./script.js")).App.voice.stream), true, "review does not stop the active voice session");
     await retailFrame.getByRole("button",{name:"確認を終える",exact:true}).click();
     await expect(page.locator("#finder-voice")).toBeVisible();
+    assert.equal(await page.locator("#finder-voice").evaluate(panel => panel.matches(":modal")), false, "review restores a nonblocking voice panel");
     releaseReview(); releaseReview=undefined;
     await expect.poll(() => voiceResults.length).toBeGreaterThan(repliesBeforeReview);
     assert.match(voiceResults.at(-1).answer,/作家の器と手帳/);
@@ -174,6 +190,12 @@ try {
     await expect(embedded.locator("#voice-open")).not.toBeVisible();
     await embedded.locator("#assistant-toggle").click();
     await expect(embedded.locator("#assistant #voice-open")).toBeVisible();
+    assert.equal(await embedded.locator("#voice-open").evaluate(button => button.closest(".shop-voice-controls").previousElementSibling.id === "assistant-heading"), true);
+    assert.equal(await embedded.locator(".assistant-sidebar-header").evaluate(header => {
+      const bounds = header.getBoundingClientRect();
+      return header.getBoundingClientRect().bottom <= document.querySelector(".assistant-sidebar-content").getBoundingClientRect().top && [...header.children].every(child => child.getBoundingClientRect().bottom <= bounds.bottom);
+    }), true, "wrapped header controls stay above the chat content");
+    await page.screenshot({path:join(codeRoot,`test-results/voice/embedded-entry-${width}.png`)});
     await embedded.locator("#assistant #voice-open").click();
     await expect(page.locator("#voice-start")).toHaveText("■ 音声を終了");
     await expect(page.locator("#voice-target")).toHaveValue("komado");
@@ -191,12 +213,19 @@ try {
       await standalone.locator("#assistant-toggle").click();
       const launcher=standalone.locator("#assistant #voice-open");
       await expect(launcher).toBeVisible();
-      assert.equal(await launcher.evaluate(button=>button.closest(".shop-voice-controls").nextElementSibling.classList.contains("ns-inputbar")),true);
+      assert.equal(await launcher.evaluate(button=>button.closest(".shop-voice-controls").previousElementSibling.id === "assistant-heading"),true);
+      const shopTitle = await standalone.locator("#assistant-heading").boundingBox();
+      const shopVoice = await launcher.boundingBox();
+      assert.ok(shopVoice.x >= shopTitle.x + shopTitle.width && Math.abs(shopVoice.y + shopVoice.height / 2 - shopTitle.y - shopTitle.height / 2) < 2, "shop voice entry sits beside the chat heading");
       await expect(standalone.locator("#finder-voice")).not.toBeVisible();
       await standalone.screenshot({path:join(codeRoot,`test-results/voice/standalone-entry-${slug}-${width}.png`),fullPage:true});
       await launcher.click();
       const english=await standalone.locator("html").getAttribute("lang")==="en";
       await expect(standalone.locator("#voice-start")).toHaveText(english?"■ End voice":"■ 音声を終了");
+      assert.equal(await standalone.locator("#finder-voice").evaluate(panel => panel.matches(":modal")), false);
+      await standalone.locator("#ns-input").fill("Voice leaves chat usable");
+      await expect(standalone.locator("#ns-input")).toBeFocused();
+      await standalone.locator("#ns-input").fill("");
       await expect(standalone.locator("#voice-target")).toHaveValue(slug);
       await expect(standalone.locator("#voice-target")).toBeDisabled();
       await expect(standalone.locator("#voice-target option")).toHaveCount(1);

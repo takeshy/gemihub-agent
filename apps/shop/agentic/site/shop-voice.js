@@ -2,8 +2,10 @@ import { GuideVoice } from "./voice-chat.js";
 import { runVisibleChatTurn } from "./voice-turn.js";
 
 function controls() {
-  const host = document.createElement("div"); host.className = "shop-voice-controls";
-  document.querySelector(".ns-inputbar").before(host);
+  const host = document.createElement("div"); host.className = "shop-voice-controls finder-voice-entry";
+  const row = document.createElement("div"); row.className = "shop-voice-heading";
+  const heading = document.getElementById("assistant-heading");
+  heading.before(row); row.append(heading, host);
   return host;
 }
 

@@ -11,7 +11,7 @@ export class GuideVoice {
     this.launcher.id = "voice-open"; this.launcher.className = "finder-voice-launcher"; this.launcher.type = "button";
     this.launcher.setAttribute("aria-haspopup", "dialog"); this.launcher.setAttribute("aria-controls", "finder-voice"); this.launcher.setAttribute("aria-expanded", "false");
     const panel = node("dialog"); this.dialog = panel; panel.id = "finder-voice"; panel.className = "finder-voice";
-    panel.setAttribute("aria-labelledby", "voice-heading");
+    panel.setAttribute("aria-labelledby", "voice-heading"); panel.setAttribute("aria-modal", "false");
     const heading = node("h2", this.words("音声で話す", "Talk to AI")); heading.id = "voice-heading";
     const close = node("button", "×"); close.id = "voice-close"; close.className = "finder-voice-close"; close.type = "button"; close.autofocus = true;
     close.setAttribute("aria-label", this.words("閉じる", "Close"));
@@ -32,16 +32,16 @@ export class GuideVoice {
     const row = node("div"); row.className = "finder-voice-controls"; row.append(label, this.button);
     if (!launcherHost) {
       launcherHost = node("div"); launcherHost.className = "finder-voice-entry";
-      document.querySelector("#agent-app .ns-inputbar").before(launcherHost);
+      document.querySelector("#agent-app .ns-header .ns-title").after(launcherHost);
     }
     panel.append(header, mode, row, this.status, this.heard, this.spoken); launcherHost.append(this.launcher); document.body.append(panel);
     this.launcher.addEventListener("click", () => this.open());
     close.addEventListener("click", () => panel.close());
-    panel.addEventListener("close", () => { if (panel.open || this.reviewing) return; this.launcher.setAttribute("aria-expanded", "false"); this.stop(); this.launcher.focus({ preventScroll: true }); });
-    panel.addEventListener("click", event => {
-      if (event.target !== panel) return;
-      const box = panel.getBoundingClientRect();
-      if (event.clientX < box.left || event.clientX > box.right || event.clientY < box.top || event.clientY > box.bottom) panel.close();
+    panel.addEventListener("close", () => { this.updateSpace(); if (panel.open || this.reviewing) return; this.launcher.setAttribute("aria-expanded", "false"); this.stop(); this.launcher.focus({ preventScroll: true }); });
+    this.resize = new ResizeObserver(() => this.updateSpace()); this.resize.observe(panel);
+    document.addEventListener("keydown", event => {
+      if (event.key !== "Escape" || event.defaultPrevented || !panel.open || document.querySelector("dialog:modal")) return;
+      event.preventDefault(); panel.close();
     });
     this.select.addEventListener("change", () => {
       this.cancelQuestions(); this.silence();
@@ -54,23 +54,28 @@ export class GuideVoice {
     this.button.addEventListener("click", () => this.state === "off" ? void this.start() : this.stop());
     document.getElementById("ns-newchat")?.addEventListener("click", () => this.stop());
     document.getElementById("ai-settings-open")?.addEventListener("click", () => this.stop());
-    window.addEventListener("pagehide", () => this.stop());
+    window.addEventListener("pagehide", () => { this.resize.disconnect(); this.stop(); });
     this.updateTarget();
   }
   words(ja, en) { return this.english ? en : ja; }
+  updateSpace() {
+    document.body.classList.toggle("has-finder-voice", this.dialog.open);
+    document.body.style.setProperty("--finder-voice-height", `${this.dialog.open ? Math.ceil(this.dialog.getBoundingClientRect().height) : 0}px`);
+  }
   open() {
-    if (!this.dialog.open) this.dialog.showModal();
+    if (!this.dialog.open) this.dialog.show();
+    this.updateSpace();
     this.launcher.setAttribute("aria-expanded", "true");
     if (this.state === "off") void this.start();
   }
   review(open) {
     if (open && this.dialog?.open) {
-      this.reviewing = true; this.dialog.close(); this.launcher.setAttribute("aria-expanded", "false");
+      this.reviewing = true; this.dialog.close(); this.updateSpace(); this.launcher.setAttribute("aria-expanded", "false");
       this.launcher.textContent = this.words("🎙 音声会話中・戻る", "🎙 Voice active · Return");
     } else if (!open && this.reviewing) {
       this.reviewing = false;
       this.launcher.textContent = this.words("🎙 音声で話す", "🎙 Talk to AI");
-      if (this.state !== "off") { if (!this.dialog.open) this.dialog.showModal(); this.launcher.setAttribute("aria-expanded", "true"); }
+      if (this.state !== "off") { if (!this.dialog.open) this.dialog.show(); this.updateSpace(); this.launcher.setAttribute("aria-expanded", "true"); }
     }
   }
   updateTarget() { if (this.select) this.select.value = this.shopFrame.shop?.id || ""; }

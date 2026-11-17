@@ -22,7 +22,7 @@
 - **Managed AI & BYOK Support**  
   Runs out of the box with managed Gemini API access, while also allowing visitors to switch to **BYOK (Bring Your Own Key)** with their own API key.
 
-When managed voice AI is enabled, **Talk to AI** appears beside the input in the town-guide and shop chat screens. It opens a voice-mode dialog; closing the dialog or pressing Esc ends the microphone session. The button appears inside chat, and shop confirmations remain on screen. See [AI and voice settings](docs/managed-ai.md#親の音声会話).
+When managed voice AI is enabled, **Talk to AI** appears beside the heading at the top of both the town-guide and shop chat screens. It opens a compact voice panel at the bottom right while leaving the rest of the page usable; closing the panel or pressing Esc ends the microphone session. The button appears inside chat, and shop confirmations remain on screen. See [AI and voice settings](docs/managed-ai.md#親の音声会話).
 
 ---
 
@@ -31,7 +31,8 @@ When managed voice AI is enabled, **Talk to AI** appears beside the input in the
 - **Google Gemini API**
   - Shop discovery & agent queries: `gemini-4-hydrogen` (low)
   - Live voice interaction: `gemini-3.8-live`
-  - Storefront generation, page editing, visual review, and genre classification support
+  - Storefront/theme and page HTML/CSS generation: `gemini-4-argon`
+  - Visual review and genre classification support
 - **Open Agentic Web** (built on [agentify-website](https://github.com/cognizant-ai-labs/agentic-web))  
   Decentralized federation between the town portal and individual shop agents
 - **Runtime & Frontend**  

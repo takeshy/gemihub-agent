@@ -31,7 +31,8 @@
 - **Google Gemini API**
   - 店舗検索・照会：`gemini-4-hydrogen`（low）
   - 音声対話：`gemini-3.8-live`
-  - 個店サイト生成・ページ編集・画面自動レビュー・ジャンル分類補助
+  - 個店テーマ・ページのHTML/CSS生成：`gemini-4-argon`
+  - 画面自動レビュー・ジャンル分類補助
 - **Open Agentic Web**（[agentify-website](https://github.com/cognizant-ai-labs/agentic-web) ベース）  
   親ポータルと各店舗 AI 間の分散エージェント連携基盤
 - **ランタイム / フロントエンド**  

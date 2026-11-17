@@ -29,7 +29,7 @@ try {
   await mkdir("tmp", { recursive: true });
   for (const width of [1280, 390]) for (const locale of ["ja", "en"]) {
     const t = text => locale === "en" ? english[text] || text : text;
-    const context = await browser.newContext({ viewport: { width, height: 900 }, locale: locale === "en" ? "en-US" : "ja-JP", reducedMotion: "reduce" });
+    const context = await browser.newContext({ viewport: { width, height: width === 390 ? 700 : 900 }, locale: locale === "en" ? "en-US" : "ja-JP", reducedMotion: "reduce" });
     await context.addInitScript(() => {
       const read = FileReader.prototype.readAsDataURL;
       window.__imageReads = [];
@@ -53,6 +53,10 @@ try {
       const story = entries.find(entry => entry.title === "運営/設定/画像管理" && entry.exportName === exportName);
       assert.ok(story, exportName);
       await page.goto(`${origin}/iframe.html?id=${encodeURIComponent(story.id)}&viewMode=story&lang=${locale}`);
+      if (exportName === "GenerateVoice") {
+        await expect(page.getByRole("dialog", { name: t("音声入力"), exact: true })).toBeVisible();
+        return;
+      }
       const scope = ["Library", "Uploading"].includes(exportName) ? page.getByRole("region", { name: t("画像管理"), exact: true }) : dialog;
       await expect(scope).toBeVisible();
       if (exportName === "Uploading") await expect(scope.getByLabel(t("画像をアップロード"), { exact: true })).toBeDisabled();
@@ -103,6 +107,7 @@ try {
     await card("direct-upload.png").getByRole("button", { pressed: true }).click();
     await button(dialog, "AIで生成").click();
     await dialog.getByRole("button", { name: new RegExp(t("文章で依頼")) }).click();
+    await expect(dialog.getByLabel(t("生成したい画像"), { exact: true })).toBeInViewport({ ratio: 1 });
     await dialog.getByLabel(t("画像の名前"), { exact: true }).fill("generated.png");
     await dialog.getByLabel(t("生成したい画像"), { exact: true }).fill("Flowers by a bright window");
     // The upload indicator must remain visible even with the AI form expanded.
@@ -122,6 +127,7 @@ try {
     await review.locator(".library-image").scrollIntoViewIfNeeded();
     await expect(review.locator("img")).toBeVisible();
     await expect(button(dialog, "これでOK")).toBeEnabled();
+    await expect(card("generated.png").getByRole("button", { pressed: true })).toBeAttached();
     await capture("35-image-generation-result.jpg");
     await button(dialog, "これでOK").click();
     await expect(card("generated.png").getByRole("button", { pressed: true })).toBeVisible();
@@ -137,14 +143,15 @@ try {
     await expect(page.locator(".request-image-selection")).toContainText("generated.png");
     assert.ok(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth + 1), "picker fits the viewport");
     await open("GenerateVoice");
-    await button(dialog, "音声で指示する").click();
     const speech = page.getByRole("dialog", { name: t("音声入力"), exact: true });
+    await expect(speech).toBeVisible();
     await expect(speech.getByRole("textbox", { name: t("書き起こした内容"), exact: true })).toHaveValue("Flowers in soft light");
     await page.keyboard.press("Escape");
     await expect(speech).toHaveCount(0);
     await expect(dialog).toBeVisible();
     await dialog.getByLabel(t("画像の名前"), { exact: true }).fill("voice-generated.png");
     await expect(dialog.getByLabel(t("音声で伝えた内容・修正"), { exact: true })).toHaveValue("Flowers in soft light");
+    await expect(dialog.getByLabel(t("音声で伝えた内容・修正"), { exact: true })).toBeInViewport({ ratio: 1 });
     await capture("34-image-generation-voice.jpg");
     await button(dialog, "生成して結果を確認").click();
     await review.locator(".library-image").scrollIntoViewIfNeeded();
@@ -169,19 +176,27 @@ try {
     await button(dialog, "選択した画像を使う").click();
     await expect(page.locator(".request-image-selection")).toContainText("iteration.png");
 
-    await page.locator("aside nav").getByRole("button", { name: new RegExp(t("AIとお店をつくる") + "$") }).click();
-    await page.getByRole("treeitem", { name: t("ヘッダー"), exact: true }).click();
-    await page.getByText(t("ヘッダー") + t("の内容を編集"), { exact: true }).click();
-    await button(page, "画像管理から選ぶ・AIで生成").click();
+    await button(page.locator(".shop-change-chat"), "閉じる").click();
+    const menuToggle = page.locator(".mobile-menu-toggle");
+    if (await menuToggle.isVisible()) await menuToggle.click();
+    await page.locator("aside nav").getByRole("button", { name: new RegExp(t("メニュー・料金") + "$") }).click();
+    const menuEditor = page.locator(".menu-image-editor").first();
+    await button(menuEditor, "既存の画像から選ぶ").click();
     const editorPicker = page.getByRole("dialog", { name: t("画像を選ぶ"), exact: true });
     await expect(editorPicker).toBeVisible();
     await selectionOnly(editorPicker);
     await expect(button(editorPicker, "AIで生成")).toBeVisible();
-    await editorPicker.locator("figure").first().getByRole("button", { pressed: false }).filter({ hasText: t("選択する") }).click();
+    await button(editorPicker, "AIで生成").click();
+    await editorPicker.getByRole("button", { name: new RegExp(t("文章で依頼")) }).click();
+    await editorPicker.getByLabel(t("画像の名前"), { exact: true }).fill("single-generated.png");
+    await editorPicker.getByLabel(t("生成したい画像"), { exact: true }).fill("A course meal");
+    await button(editorPicker, "生成して結果を確認").click();
+    await expect(editorPicker.locator("figure").filter({ hasText: "single-generated.png" }).getByRole("button", { pressed: true })).toBeAttached();
+    await expect(editorPicker.getByRole("button", { pressed: true })).toHaveCount(1);
+    await button(editorPicker, "これでOK").click();
     await button(editorPicker, "この画像を使う").click();
-    const headerImage = page.locator(".local-preview-screen .managed-hero-image");
-    await headerImage.scrollIntoViewIfNeeded();
-    await expect(headerImage.locator("img")).toBeVisible();
+    await menuEditor.scrollIntoViewIfNeeded();
+    await expect(menuEditor.locator(".menu-image img")).toBeVisible();
     // The independent management screen owns the image-card management actions.
     await open("Library");
     const manager = page.getByRole("region", { name: t("画像管理"), exact: true });
@@ -215,6 +230,16 @@ try {
     if (locale === "ja" && width === 1280) {
       await expect(dialog.getByRole("button", { pressed: true })).toHaveCount(15);
       await expect(dialog.getByRole("alert")).toContainText("15枚まで選択できます。");
+      await button(dialog, "AIで生成").click();
+      await dialog.getByRole("button", { name: new RegExp(t("文章で依頼")) }).click();
+      await dialog.getByLabel(t("画像の名前"), { exact: true }).fill("over-limit.png");
+      await dialog.getByLabel(t("生成したい画像"), { exact: true }).fill("Flowers");
+      await button(dialog, "生成して結果を確認").click();
+      await expect(button(dialog, "これでOK")).toBeEnabled();
+      await expect(dialog.getByRole("status")).toContainText(t("画像を保存しました。選択済みの画像を外してから、この画像を選んでください。"));
+      await expect(card("over-limit.png").getByRole("button", { pressed: false }).filter({ hasText: t("選択する") })).toBeAttached();
+      await button(dialog, "これでOK").click();
+      await expect(dialog.getByRole("button", { pressed: true })).toHaveCount(15);
     }
     await button(dialog, "選択した画像を使う").click();
     await expect(page.locator(".request-image-selection")).toContainText("empty-1.png");

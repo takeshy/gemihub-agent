@@ -16,7 +16,7 @@ import { currencyOf, regionOf, toMinor } from "../shared/region";
 export type PreviewScreen = { id: string; name: string; description: string; pane?: string; category?: "blogs" | "announcements"; article?: boolean; articleKey?: string; pageSlug?: string };
 export function previewScreens(config: ShopConfig): PreviewScreen[] {
   return ([
-    { id: "reserve", name: tr("予約"), description: tr("メニュー・担当者・日時を選んで予約"), pane: "reserve" },
+    { id: "reserve", name: tr("予約"), description: config.industry === "restaurant" ? tr("人数・日時を選んで席やコースを予約") : tr("メニュー・担当者・日時を選んで予約"), pane: "reserve" },
     { id: "about", name: tr("お店のこと"), description: tr("お店の紹介・アクセス・メニュー"), pane: "about" },
     { id: "mine", name: tr("マイページ"), description: tr("自分の予約を確認・キャンセル"), pane: "mine" },
     { id: "contact", name: tr("お問い合わせ"), description: tr("お店に質問やメッセージを送る"), pane: "contact" },

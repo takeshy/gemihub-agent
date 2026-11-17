@@ -4,9 +4,9 @@ import { createPortal } from "react-dom";
 import { createDictation, defaultEndKeyword, endKeywordStorageKey, type SpeechConstructor } from "./dictation";
 import { submitOnShortcut } from "./submit-shortcut";
 
-export function DictationButton({disabled,value,onChange,onSend,onListening,stopRef,label=tr("音声入力"),maxLength=4000}:{
+export function DictationButton({disabled,value,onChange,onSend,onListening,stopRef,onStart,className,pressed,label=tr("音声入力"),maxLength=4000}:{
   disabled?:boolean;value:string;onChange:(text:string)=>void;onSend?:(text:string)=>void;
-  onListening?:(listening:boolean)=>void;stopRef?:React.RefObject<(()=>void)|null>;label?:string;maxLength?:number;
+  onListening?:(listening:boolean)=>void;stopRef?:React.RefObject<(()=>void)|null>;onStart?:()=>void;className?:string;pressed?:boolean;label?:React.ReactNode;maxLength?:number;
 }) {
   const callbacks=useRef({onChange,onSend,onListening});callbacks.current={onChange,onSend,onListening};
   const text=useRef(value);text.current=value;
@@ -36,7 +36,7 @@ export function DictationButton({disabled,value,onChange,onSend,onListening,stop
   useEffect(()=>{if(open)dialog.current?.showModal();},[open]);
   const phrases=keyword.split(/[,、\n]/).map(value=>value.trim()).filter(Boolean);
   return <div className="dictation">
-    <button type="button" className="dictation-toggle" aria-haspopup="dialog" aria-expanded={open} disabled={disabled} onClick={()=>{setOpen(true);engine.current?.start(keyword);}}>{label}</button>
+    <button type="button" className={`dictation-toggle ${className || ""}`} aria-pressed={pressed} aria-haspopup="dialog" aria-expanded={open} disabled={disabled} onClick={()=>{onStart?.();setOpen(true);engine.current?.start(keyword);}}>{label}</button>
     {open&&createPortal(<dialog ref={dialog} className="dictation-dialog" aria-label={tr("音声入力")} onCancel={close} onClose={close} onClick={event=>{if(event.target===event.currentTarget)close();}}>
       <div className="section-top"><h2>{tr("音声入力")}</h2><button type="button" autoFocus aria-label={tr("閉じる")} onClick={close}>×</button></div>
       <p className="dictation-status" role="status"><span className={state.listening?"dictation-indicator listening":"dictation-indicator"} aria-hidden="true"/>{state.listening?tr("聞いています…"):tr("音声入力を停止しています")}</p>

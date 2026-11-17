@@ -7,7 +7,7 @@ export function InitialPlanReview({shopId,plan,busy,onBack,onAccept}:{shopId:str
   return <section className="request-review" aria-label={tr("下記の画面でいいですか？")}><span className="pill">{tr("まだお客様には公開されません")}</span><h3>{tr("下記の画面でいいですか？")}</h3><p>{tr("まずは、お店のページでできることを確認しましょう。")}</p>
     <ScreenGallery config={plan.config} shopId={shopId}/>
     {plan.themeReview?.rendered && <p className="small muted">{tr("修正後のPC・スマートフォンの画面をAIで確認しました。")}</p>}
-    <FunctionalOverview pages={plan.config.pages.map(page=>page.title)} articles={plan.config.appearance?.articles}/>
+    <FunctionalOverview config={plan.config}/>
     <p>{tr("用意するページや機能を変更したい場合は、「聞き取りに戻る」から希望を伝えてください。")}</p>
     <aside className="initial-design-guidance">
       <h4>{tr("仮公開したあとにできること")}</h4>

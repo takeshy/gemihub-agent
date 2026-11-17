@@ -4559,5 +4559,13 @@
   "チャットの資料・本文を確認して公開": "Chat documents - review and publish",
   "公開資料から地域の情報を回答": "Answer local questions from published documents",
   "地域の案内を音声で相談": "Ask the local guide by voice",
-  "話し相手を店舗に切り替える": "Switch the voice conversation to a shop"
+  "話し相手を店舗に切り替える": "Switch the voice conversation to a shop",
+  "人数・日時・": "Choose the party size, date and time,",
+  "人数・日時を選んで席やコースを予約": "Choose the party size, date and time to reserve seats or a course",
+  "席のみ・コースを選ぶ": "and seats only or a course",
+  "変更・キャンセルはお店へ": "Contact the shop to change or cancel",
+  "生成した画像を選択しました。内容を確認してから使用してください。": "The generated image is selected. Review it before use.",
+  "選択中の画像は、この画面で確定すると依頼や編集に使えます。": "Confirm the selected images in this screen to use them in your request or edits.",
+  "「音声で依頼」を押すと音声入力が始まります。「以上」と言うか「音声入力を止める」で止め、「入力を使う」で戻ります。指示欄の文字を確認・修正してから生成します。": "Choose “Request by voice” to start voice input. Say the end phrase or choose “Stop voice input”, then “Use input” to return. Review and edit the instructions before generating.",
+  "「生成して結果を確認」を押して待ちます。画像選択画面では生成した画像が自動で選択されます。生成画像を見て「これでOK」で一覧に戻り、「選択した画像を使う」または「この画像を使う」で確定します。「さらに依頼する」で生成画像を参考に修正できます。生成しただけではページは更新されません。": "Choose “Generate and review” and wait. In the image picker, the generated image is selected automatically. Review it, choose “Looks good” to return to the list, then confirm with “Use selected images” or “Use this image”. Choose “Refine this image” to request changes using it as a reference. Generating alone does not update the page."
 }

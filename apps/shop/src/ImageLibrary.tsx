@@ -37,6 +37,25 @@ export function ImageLibrary({ shopId, mode = "manage", onSelect, onCreated, onR
   const [deleting, setDeleting] = useState<string>();
   const [zoomId, setZoomId] = useState<string>();
   const [attempt, setAttempt] = useState(0);
+  const generator = useRef<HTMLElement>(null);
+  const promptInput = useRef<HTMLTextAreaElement>(null);
+  const resultView = useRef<HTMLElement>(null);
+  const selectedGenerated = useRef<string | undefined>(undefined);
+  const createdCallback = useRef(onCreated); createdCallback.current = onCreated;
+  useEffect(() => { if (generatorOpen) generator.current?.scrollIntoView({ block: "start" }); }, [generatorOpen]);
+  useEffect(() => {
+    if (!method || generated) return;
+    if (method === "text") promptInput.current?.focus({ preventScroll: true });
+    promptInput.current?.scrollIntoView({ block: "center" });
+  }, [method, generated]);
+  useEffect(() => { if (generated) resultView.current?.scrollIntoView({ block: "start" }); }, [generated]);
+  useEffect(() => {
+    if (managing || !generated || selectedGenerated.current === generated.id) return;
+    const image = images?.find(image => image.id === generated.id);
+    if (!image) return;
+    selectedGenerated.current = generated.id;
+    setNotice(createdCallback.current?.(image) === false ? tr("画像を保存しました。選択済みの画像を外してから、この画像を選んでください。") : tr("生成した画像を選択しました。内容を確認してから使用してください。"));
+  }, [generated, images, managing]);
   useEffect(() => { onImagesChange?.(images); }, [images, onImagesChange]);
   useEffect(() => { onBusyChange?.(busy || listening); }, [busy, listening, onBusyChange]);
   useEffect(() => {
@@ -87,31 +106,30 @@ export function ImageLibrary({ shopId, mode = "manage", onSelect, onCreated, onR
     {upload && !busy && <button type="button" onClick={() => void saveUpload(upload)}>{tr("アップロードを再試行")}</button>}
     {uploading && <ImageUploadStatus name={upload?.file.name} />}
     {busy && !uploading && !generatorOpen && <p role="status">{tr("画像を保存しています…")}</p>}
-    {generatorOpen && <section className="image-generation" aria-label={tr("AIで画像を生成する")}>
+    {generatorOpen && <section ref={generator} className="image-generation" aria-label={tr("AIで画像を生成する")}>
       <h3>{tr("AIで画像を生成する")}</h3>
       {!generated && <>
       <p>{tr("作りたい画像のイメージを、文章か音声で伝えてください。")}</p>
       <div className="request-methods" role="group" aria-label={tr("画像生成の依頼方法")}>
         <button type="button" className={method === "text" ? "selected" : ""} aria-pressed={method === "text"} disabled={busy || listening || !!pending} onClick={() => setMethod("text")}><span aria-hidden="true">✎</span><b>{tr("文章で依頼")}</b><small>{tr("作りたい画像を書く")}</small></button>
-        <button type="button" className={method === "voice" ? "selected" : ""} aria-pressed={method === "voice"} disabled={busy || listening || !!pending} onClick={() => setMethod("voice")}><span aria-hidden="true">◉</span><b>{tr("音声で依頼")}</b><small>{tr("声でイメージを伝える")}</small></button>
+        <DictationButton className={method === "voice" ? "selected" : ""} pressed={method === "voice"} disabled={busy || !!pending} onStart={() => setMethod("voice")} onListening={setListening} value={prompt} onChange={setPrompt} label={<><span aria-hidden="true">◉</span><b>{tr("音声で依頼")}</b><small>{tr("声でイメージを伝える")}</small></>} />
       </div>
       {method && <form onSubmit={event => { event.preventDefault(); event.stopPropagation(); void run(async () => {
       const input = pending || generateImageSchema.parse({ requestId: createRequestId(), prompt, name, aspectRatio: ratio, ...(reference ? { referenceImageId: reference } : {}) });
       localStorage.setItem(pendingKey, JSON.stringify(input)); setPending(input);
       const result = await api<{ imageId: string }>(`${base}/generate`, input);
-      localStorage.removeItem(pendingKey); setPending(undefined); setAttempt(v => v + 1); setGenerated({ id: result.imageId, name: input.name }); setNotice(tr("AIで生成した画像を画像管理に保存しました。内容を確認してから使用してください。"));
+      localStorage.removeItem(pendingKey); setPending(undefined); selectedGenerated.current = undefined; setAttempt(v => v + 1); setGenerated({ id: result.imageId, name: input.name }); setNotice(tr("AIで生成した画像を画像管理に保存しました。内容を確認してから使用してください。"));
     }); }}>
-      {method === "voice" && <div className="image-voice-request"><h4>{tr("作りたい画像を声で伝える")}</h4><p>{tr("下のボタンを押して話してください。話した内容を確認・修正してから生成します。")}</p><DictationButton disabled={busy || !!pending} onListening={setListening} value={prompt} onChange={setPrompt} label={tr("音声で指示する")} /></div>}
       <fieldset disabled={busy || !!pending || listening}>
+        <label>{method === "voice" ? tr("音声で伝えた内容・修正") : tr("生成したい画像")}<textarea ref={promptInput} aria-label={method === "voice" ? tr("音声で伝えた内容・修正") : tr("生成したい画像")} required rows={4} maxLength={4000} value={prompt} onChange={event => setPrompt(event.target.value)} placeholder={method === "voice" ? tr("話した内容がここに表示されます。文字でも修正できます。") : tr("例：明るい窓辺に季節の花を飾った、お店の紹介ページ向けの写真")} /></label>
         <label>{tr("画像の名前")}<input required value={name} maxLength={255} onChange={event => setName(event.target.value)} /></label>
-        <label>{method === "voice" ? tr("音声で伝えた内容・修正") : tr("生成したい画像")}<textarea aria-label={method === "voice" ? tr("音声で伝えた内容・修正") : tr("生成したい画像")} required rows={4} maxLength={4000} value={prompt} onChange={event => setPrompt(event.target.value)} placeholder={method === "voice" ? tr("話した内容がここに表示されます。文字でも修正できます。") : tr("例：明るい窓辺に季節の花を飾った、お店の紹介ページ向けの写真")} /></label>
         <label>{tr("画像の比率")}<select value={ratio} onChange={event => setRatio(event.target.value as GenerateImageInput["aspectRatio"])}>{["1:1", "4:3", "3:4", "16:9", "9:16"].map(value => <option key={value}>{value}</option>)}</select></label>
       </fieldset>
       <RequestImagePicker shopId={shopId} max={1} value={reference ? [reference] : []} onChange={ids => setReference(ids[0] || "")} disabled={busy || !!pending || listening} label={tr("参考画像を選ぶ")} allowGeneration={false} />
       <div className="actions"><button className="primary" type="submit" disabled={busy || listening || !prompt.trim() || !name.trim()}>{busy ? tr("画像を生成しています…") : pending ? tr("生成・保存を再試行") : tr("生成して結果を確認")}</button>{pending && <button type="button" disabled={busy || listening} onClick={newGeneration}>{tr("新しい生成として入力し直す")}</button>}</div>
     </form>}
     </>}
-    {generated && <section className="request-review image-generation-result" aria-label={tr("生成した画像を確認")}><span className="pill">{tr("確認")}</span><h3>{tr("生成した画像を確認")}</h3><MenuImage imageId={generated.id} imageBase={base} name={generated.name} className="library-image" view="thumbnail" /><p>{generated.name}</p><p className="small muted">{managing ? tr("画像管理に保存しました。ページやメニューの画像選択から使用できます。") : tr("画像を保存しました。「これでOK」で選択し、この画面で確定すると依頼や編集に使えます。")}</p><div className="actions"><button type="button" onClick={() => { setReference(generated.id); setGenerated(undefined); setMethod(undefined); setNotice(""); }}>{tr("さらに依頼する")}</button><button type="button" className="primary" disabled={!images?.some(image => image.id === generated.id)} onClick={() => { const image = images?.find(image => image.id === generated.id); if (image) onCreated?.(image); setGeneratorOpen(false); setQuery(""); setSource("all"); }}>{tr("これでOK")}</button></div></section>}
+    {generated && <section ref={resultView} className="request-review image-generation-result" aria-label={tr("生成した画像を確認")}><span className="pill">{tr("確認")}</span><h3>{tr("生成した画像を確認")}</h3><MenuImage imageId={generated.id} imageBase={base} name={generated.name} className="library-image" view="thumbnail" /><p>{generated.name}</p><p className="small muted">{managing ? tr("画像管理に保存しました。ページやメニューの画像選択から使用できます。") : tr("選択中の画像は、この画面で確定すると依頼や編集に使えます。")}</p><div className="actions"><button type="button" onClick={() => { setReference(generated.id); setGenerated(undefined); setMethod(undefined); setNotice(""); }}>{tr("さらに依頼する")}</button><button type="button" className="primary" disabled={!images?.some(image => image.id === generated.id)} onClick={() => { const image = images?.find(image => image.id === generated.id); if (image) onCreated?.(image); setGeneratorOpen(false); setQuery(""); setSource("all"); }}>{tr("これでOK")}</button></div></section>}
     </section>}
     <div className="customer-controls"><label>{tr("画像を検索")}<input type="search" value={query} onChange={event => setQuery(event.target.value)} /></label><label>{tr("画像の種類")}<select value={source} onChange={event => setSource(event.target.value)}><option value="all">{tr("すべて")}</option><option value="upload">{tr("アップロード")}</option><option value="ai">{tr("AI生成")}</option></select></label></div>
     {!images && !error && <p role="status">{tr("画像を読み込んでいます…")}</p>}

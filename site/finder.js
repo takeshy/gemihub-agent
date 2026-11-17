@@ -80,7 +80,7 @@ export class FinderPage {
   }
 
   listShops({ area = "", cuisine = "", query = "", purpose = "introduction" } = {}) {
-    const normalize = value => value.normalize("NFKC").toLowerCase().replace(/\s/g, "");
+    const normalize = value => value.normalize("NFKC").toLowerCase().replace(/\s/g, "").replace(/ネイルサロン/g, "ネイル");
     const place = normalize(normalizeShopFilter(area));
     const genre = normalize(normalizeShopFilter(cuisine)).replace(/料理$/, "");
     const terms = query.trim().split(/\s+/).filter(Boolean).map(normalize);

@@ -124,6 +124,17 @@ test("shop introductions and filters work before dates or party size are provide
   assert.deepEqual(page.getState(), before);
 });
 
+test("nail salon searches match registered nail services with area and keyword restrictions intact", () => {
+  const nail = { ...store, id: "nail", name: "Num05", area: "横浜市港北区", cuisine: "ネイル・美容サービス", description: "気さくなお店" };
+  const page = new FinderPage([nail, store]);
+  for (const filter of [{ cuisine: "ネイルサロン" }, { query: "ネイルサロン" }, { cuisine: "ネイル", area: "横浜" }]) {
+    assert.deepEqual(page.listShops(filter).map(shop => shop.id), [nail.id]);
+  }
+  assert.deepEqual(page.listShops({ cuisine: "ネイルサロン", area: "新宿" }), []);
+  assert.deepEqual(page.listShops({ query: "ネイルサロン 未掲載の施術" }), []);
+  assert.deepEqual(page.listShops({ cuisine: "ネイルサロン", purpose: "reservation" }), []);
+});
+
 test("agents without get_shop_info still use the normal page for shop metadata", async () => {
   let calls = 0;
   const result = await resolveShop(store.pageUrl, { discovery: true, fetch: async (url, options) => {

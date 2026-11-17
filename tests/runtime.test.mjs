@@ -65,6 +65,28 @@ test("scripted model calls the real read tool and receives a receipt", async () 
   assert.equal(model.toolResults(1)[0].result.today, "2026-11-14");
 });
 
+test("nail discovery searches and prepares cards in one tool call before the final model response", async () => {
+  const nail = { id: "nail", name: "Num05", area: "横浜市港北区", cuisine: "ネイル・美容サービス", description: "気さくなお店", pageUrl: "https://nail.example/", networkUrl: "", reservationEnabled: false };
+  const changes = [];
+  App.page = new FinderPage([nail, ...shops], { onChange: kind => changes.push(kind) });
+  const model = new ScriptedModel([
+    { tool: "website_show_shop_introductions", arguments: { cuisine: "ネイルサロン" } },
+    { text: "店舗サイトで詳しくご覧いただけます。" },
+  ]);
+  const ctx = context(model);
+  const result = await runAgent(ctx, ctx.frontMan, "ネイルサロンを探している", null, []);
+  assert.equal(model.calls.length, 2);
+  assert.deepEqual(changes, ["introductions"]);
+  assert.deepEqual(App.page.getState().introductions, [nail.id]);
+  assert.equal(App.page.getState().valid, false);
+  assert.deepEqual(model.toolResults(1)[0].result.shops, [nail]);
+  assert.match(result.text, /店舗サイト/);
+  // Explicit IDs remain available for curated results; an unknown genre returns no cards.
+  assert.equal((await call(ctx, "website_show_shop_introductions", { shopIds: ["akari"] })).result.count, 1);
+  assert.equal((await call(ctx, "website_show_shop_introductions", { cuisine: "未登録のジャンル" })).result.count, 0);
+  await assert.rejects(call(ctx, "website_show_shop_introductions", { shopIds: ["missing"] }), /Invalid arguments/);
+});
+
 test("write tools act without confirmation, validate schema and preserve refused state", async () => {
   let confirmations = 0;
   const ctx = context(undefined, async () => { confirmations += 1; return true; });

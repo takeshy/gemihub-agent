@@ -16,8 +16,11 @@ export function registerActions(actions) {
     { shopId, target: { type: "string", enum: ["shop", "reserve"], description: "shop=お店のページ、reserve=予約ページ。利用者が予約を希望した場合はreserve。" } }, ["shopId"], args => App.shopFrame?.open(args.shopId, { target: args.target || "shop" }) || { ok: false, reason: "準備ができていません。" });
   register("list_registered_shops", "登録店のid・店名・エリア・ジャンル・紹介文・店舗URL・エージェントURL・予約対応を読む。エージェントの有無と予約対応は独立。紹介は日時や人数なしで使える。空席・在庫・価格は含まない。", "read",
     { area: string("任意の場所。新宿、東京、横浜など。空文字は指定なし。", 80), cuisine: string("任意のジャンル。雑貨、文具、中華など。空文字は指定なし。", 80), query: string("店名・ジャンル・紹介文で探す商品や目的のキーワード。例: 贈り物、万年筆。", 200), purpose: { type: "string", enum: ["introduction", "reservation"], description: "introduction=全登録店から紹介（既定）。reservation=予約ページのある店だけ。" } }, [], args => App.page.listShops(args));
-  register("show_shop_introductions", "登録情報に基づくお店の紹介カードを表示する。雑貨店など予約非対応の店にも使い、日時・人数を求めない。紹介文は登録データを使う。", "write",
-    { shopIds: { type: "array", maxItems: App.page.shops.length, items: shopId } }, ["shopIds"], args => App.page.showIntroductions(args));
+  register("show_shop_introductions", "登録店を検索し、回答文の後に出す紹介カードを準備して店名・ジャンル・紹介文・URLを返す。お店を探す・紹介する依頼は最初にこれだけを使う。日時・人数・予約状態の取得や店舗AIへの接続は不要。既知の店だけを表示する場合はshopIdsを指定できる。", "write",
+    { shopIds: { type: "array", maxItems: App.page.shops.length, items: shopId },
+      area: string("任意の場所。未指定は省略。", 80), cuisine: string("任意のジャンル。例: ネイル、雑貨、中華。未指定は省略。", 80),
+      query: string("店名・ジャンル・紹介文で探すキーワード。例: 贈り物、文具。依頼文全体ではなく検索語だけ。", 200) }, [],
+    ({ shopIds, ...filters }) => App.page.showIntroductions({ shopIds: shopIds ?? App.page.listShops(filters).map(shop => shop.id) }));
   register("confirm_shop_inquiries", "店のエージェントへ接続する前に対象と内容を確認する。予約の空席確認は日時人数をそろえる。商品・店舗情報はpurpose=introductionとqueryを指定し、日時人数は不要。エージェントのない店へは接続しない。最大4店ずつ確認する。", "write", {
     cuisine: string("希望ジャンル。未指定なら空文字。候補15店以上では未確認の希望を聞いてから進む。", 80),
     area: string("希望の場所。未指定なら空文字。指定なし・どこでもでも進められる。", 80), expectedVersion: version,

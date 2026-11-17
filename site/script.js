@@ -78,6 +78,7 @@ export class App {
   }
 
   static renderIntroductions(state) {
+    // The runtime appends its answer before returning the input bar to idle.
     if (!state.introductions?.length || document.querySelector(".ns-inputbar")?.dataset.turnActive === "true") return;
     const messages = document.getElementById("ns-msgs");
     if (!messages || messages.querySelector(`.finder-introductions[data-introduction="${state.introductionVersion}"]`)) return;

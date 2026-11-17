@@ -93,7 +93,7 @@ try {
   assert.equal(await page.locator("#agent-app #ns-input").isVisible(), false);
   assert.equal(await page.locator(".hero").isVisible(), false);
   assert.equal(await page.locator("#shop-view-header button").count(), 1);
-  assert.equal(await page.locator("#shop-close").textContent(), "← お店探しに戻る");
+  assert.equal(await page.locator("#shop-close").textContent(), "← 案内ページに戻る");
   assert.equal(await frame.locator("#ns-input").count(), 0, "the child AI does not boot before Ask the AI");
   assert.equal(modelRequests.length, searchCalls);
   assert.equal(await frame.locator("#reserve-form").isVisible(), false, "the information page has no visible reservation form");

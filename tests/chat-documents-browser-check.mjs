@@ -53,6 +53,7 @@ try {
     const visitor = await context.newPage(); visitor.on("pageerror", error => errors.push(error.message));
     await visitor.route(publicUrl + "/api/ai/v1/chat/completions", async route => {
       const body = route.request().postDataJSON(); calls.push(body);
+      assert.ok(body.messages.some(message => message.role === "system" && String(message.content).includes("地域案内窓口")), "the runtime receives the local guide role");
       const receipts = body.messages.filter(message => message.role === "tool");
       assert.ok(body.tools.some(tool => tool.function.name === "website_search_chat_documents"));
       let delta;
@@ -68,6 +69,8 @@ try {
     });
     await visitor.goto(publicUrl);
     await visitor.waitForFunction(() => window.__nsweb?.engine && !document.querySelector("#ai-settings-open").disabled);
+    await expect(visitor.locator("#ns-msgs .ns-msg.bot").first()).toContainText("イベントや公共施設、地域のお知らせ");
+    await expect(visitor.locator("#ns-input")).toHaveAttribute("placeholder", "街の情報・イベント・お店について相談…");
     async function ask() {
       const count = await visitor.locator("#ns-msgs .ns-msg.bot").count();
       await visitor.locator("#ns-input").fill("中央図書館の開館時間を教えて");

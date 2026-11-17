@@ -4,6 +4,7 @@ import { join } from "node:path";
 import { fileURLToPath } from "node:url";
 import { parse, parseFragment, serialize } from "parse5";
 import postcss from "postcss";
+import { GUIDE_GREETING, guideGreeting } from "../site/guide-copy.js";
 
 export const codeRoot = fileURLToPath(new URL("../", import.meta.url));
 const tags = new Set("a abbr article aside b blockquote br code dd details div dl dt em figcaption figure footer h1 h2 h3 h4 header hr i img li main nav ol p section slot small span strong summary table tbody td th thead time tr ul".split(" "));
@@ -33,7 +34,7 @@ export async function defaultDesign(root = codeRoot) {
     description: attr(find(doc, n => n.tagName === "meta" && attr(n, "name") === "description"), "content"),
     html: outer(p.header).replace(outer(p.navigation), '<slot name="navigation"></slot>') + "\n" + outer(p.main).replace(outer(p.assistant), '<slot name="assistant"></slot>').replace(outer(p.shops), '<slot name="shops"></slot>') + "\n" + outer(p.footer),
     css: "",
-    copy: { assistantHeading: nodeText(byId(doc, "assistant-heading")), assistantIntro: nodeText(p.assistant.childNodes.find(n => n.tagName === "p")), shopsHeading: nodeText(byId(doc, "shops-heading")), shopsIntro: nodeText(p.shops.childNodes.find(n => n.tagName === "p")), greeting: "どんなお店をお探しですか？雑貨店などのお店紹介から、飲食店の予約相談までお手伝いします。" },
+    copy: { assistantHeading: nodeText(byId(doc, "assistant-heading")), assistantIntro: nodeText(p.assistant.childNodes.find(n => n.tagName === "p")), shopsHeading: nodeText(byId(doc, "shops-heading")), shopsIntro: nodeText(p.shops.childNodes.find(n => n.tagName === "p")), greeting: GUIDE_GREETING },
   };
 }
 export async function validateDesign(input, root = codeRoot) {
@@ -78,7 +79,7 @@ export async function validateDesign(input, root = codeRoot) {
   let css; try { css = postcss.parse(input.css); } catch { fail("スタイルの形式を確認してください。"); }
   css.walkAtRules(rule => { if (!["media", "supports", "container", "keyframes", "-webkit-keyframes", "layer"].includes(rule.name.toLowerCase())) fail("外部CSSやフォントの読み込みは使用できません。"); });
   css.walkDecls(d => { if (/^(?:behavior|-moz-binding)$/i.test(d.prop)) fail("このスタイルは使用できません。"); });
-  return { title: input.title, description: input.description, html: serialize(fragment), css: css.toString(), copy: Object.fromEntries(copies.map(k => [k, input.copy[k]])) };
+  return { title: input.title, description: input.description, html: serialize(fragment), css: css.toString(), copy: Object.fromEntries(copies.map(k => [k, k === "greeting" ? guideGreeting(input.copy[k]) : input.copy[k]])) };
 }
 const safety = '\n[hidden]{display:none!important}\nbody[data-shop-view="open"] [data-editor-chrome]{display:none!important}\nbody[data-shop-view="open"] [data-editor-layout]{display:contents!important}\n';
 export async function renderDesign(config, root = codeRoot) {
@@ -122,7 +123,7 @@ export async function previewDesign(config, shops, root = codeRoot, images) {
   const page = await renderDesign(config, root), doc = parse(page.html);
   if (images) { const nodes = []; walk(doc, node => { if (attr(node, "data-image-id")) nodes.push(node); }); for (const node of nodes) set(node, "src", await images.url(attr(node, "data-image-id"))); }
   const escape = s => String(s).replaceAll("&", "&amp;").replaceAll("<", "&lt;").replaceAll('"', "&quot;");
-  const app = byId(doc, "agent-app"); app.childNodes = parseFragment(`<div class="ns-chat"><div class="ns-msgs"><div class="ns-msg bot">${escape(config.copy.greeting)}</div></div><div class="ns-inputbar"><textarea disabled placeholder="お店さがしを相談する"></textarea><button disabled>送信</button></div></div>`).childNodes;
+  const app = byId(doc, "agent-app"); app.childNodes = parseFragment(`<div class="ns-chat"><div class="ns-msgs"><div class="ns-msg bot">${escape(guideGreeting(config.copy.greeting))}</div></div><div class="ns-inputbar"><textarea disabled placeholder="街の情報・イベント・お店について相談…"></textarea><button disabled>送信</button></div></div>`).childNodes;
   byId(doc, "shop-list").childNodes = parseFragment(shops.slice(0, 100).map(s => `<article class="shop-card"><span class="eyebrow">${escape(s.area)} / ${escape(s.cuisine)}</span><h3>${escape(s.name)}</h3><p>${escape(s.description || "")}</p><a>店舗サイトを開く ↗</a></article>`).join("")).childNodes;
   content(byId(doc, "shop-count"), String(shops.length)); content(byId(doc, "assistant-status"), "");
   const remove = []; walk(doc, n => { if (["script", "iframe", "noscript"].includes(n.tagName) || n.tagName === "link" && attr(n, "rel") === "stylesheet") remove.push(n); if (n.tagName === "a") n.attrs = n.attrs.filter(a => !["href", "target"].includes(a.name)); if (["button", "input", "textarea", "select"].includes(n.tagName)) set(n, "disabled", ""); });

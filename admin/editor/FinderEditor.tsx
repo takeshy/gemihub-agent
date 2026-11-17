@@ -20,7 +20,7 @@ type Media={mimeType:'image/png';data:string};
 type Proposal={before:Item;after:Item;media:Media;imageIds:string[]};
 /** Where a saved version is previewed; Storybook replaces it with a static page. */
 export const PreviewUrl=createContext((id:string)=>`/api/site/preview?source=${encodeURIComponent(id)}`);
-function Preview({item,width,title='お店さがしの変更プレビュー'}:{item:Item;width:number;title?:string}){
+function Preview({item,width,title='案内ページの変更プレビュー'}:{item:Item;width:number;title?:string}){
  const box=useRef<HTMLDivElement>(null),url=useContext(PreviewUrl),[factor,setFactor]=useState(1);
  useLayoutEffect(()=>{const observer=new ResizeObserver(()=>setFactor(Math.min(1,(box.current?.clientWidth||width)/width)));observer.observe(box.current!);return()=>observer.disconnect();},[width]);
  return <div ref={box} className="finder-preview" style={{height:1000*factor}}><iframe title={title} sandbox="" referrerPolicy="no-referrer" src={url(item.id)} style={{width,height:1000,transform:`scale(${factor})`}}/></div>;
@@ -46,13 +46,13 @@ export function FinderEditor({api=siteApi}:{api?:ApiClient}){
   const after=await generate(text.trim(),selected,media,imageIds);if(after){setProposal({before:selected,after,media,imageIds:[...imageIds]});setInstruction('');}
  });}
  function adopt(){if(!proposal)return;choose(proposal.after);setProposal(undefined);setImageIds([]);setNotice('画面を更新しました。まだ公開していません。');}
- async function publish(){if(!state||!selected||!editable)return;await run(async()=>{setWork('公開しています…');const result=await api<State>('/api/site/publish',{sourceId:selected.id,revision:state.revision});setState(result);choose(result.published,false);setHistory([result.published]);setIndex(0);setVersion(result.published.id);setNotice(result.message||'お店さがしに反映しました。');});}
+ async function publish(){if(!state||!selected||!editable)return;await run(async()=>{setWork('公開しています…');const result=await api<State>('/api/site/publish',{sourceId:selected.id,revision:state.revision});setState(result);choose(result.published,false);setHistory([result.published]);setIndex(0);setVersion(result.published.id);setNotice(result.message||'案内ページに反映しました。');});}
  if(loading)return <main className="finder-editor"><p role="status">読み込んでいます…</p></main>;
  if(!state||!selected)return <main className="finder-editor"><p role="alert">{error||'管理画面からログインしてください。'}</p><a href="/">管理画面へ</a></main>;
  const versions=state.versions.length?state.versions:[state.published];
  return <>
   <main className="finder-editor">
-   <div className="finder-toolbar editor-toolbar"><a href="/" onClick={e=>{if(!confirmLeave())e.preventDefault();}}>← 運営管理</a><h1>お店さがしのページ</h1><div className="editor-tools"><button type="button" aria-pressed={width===1280} disabled={busy} onClick={()=>{setWidth(1280);clearCapture();}}>PC</button><button type="button" aria-pressed={width===390} disabled={busy} onClick={()=>{setWidth(390);clearCapture();}}>スマホ</button><button className="primary" disabled={busy||!dirty||!editable||!!proposal} onClick={()=>void publish()}>{selected.baseRevision?'この内容を反映する':dirty?'この版に戻す':'公開中'}</button></div></div>
+   <div className="finder-toolbar editor-toolbar"><a href="/" onClick={e=>{if(!confirmLeave())e.preventDefault();}}>← 運営管理</a><h1>案内ページ</h1><div className="editor-tools"><button type="button" aria-pressed={width===1280} disabled={busy} onClick={()=>{setWidth(1280);clearCapture();}}>PC</button><button type="button" aria-pressed={width===390} disabled={busy} onClick={()=>{setWidth(390);clearCapture();}}>スマホ</button><button className="primary" disabled={busy||!dirty||!editable||!!proposal} onClick={()=>void publish()}>{selected.baseRevision?'この内容を反映する':dirty?'この版に戻す':'公開中'}</button></div></div>
    <p id="site-design-selection" className="small muted">{selected.id===state.published.id?'公開中の内容':selected.baseRevision?'編集中 · 未公開':'履歴から選んだ内容 · 未公開'}</p>
    {notice&&<p className="notice" role="status">{notice}</p>}{error&&<p className="alert" role="alert">{error}</p>}
    <div className="finder-page-preview" style={{maxWidth:width}}>{image?<div className="visual-request"><AnnotationCanvas canvasRef={canvas} disabled={busy} onMark={()=>setMarked(true)}/><button type="button" disabled={busy||!marked} onClick={()=>{const old=image;setImage('');requestAnimationFrame(()=>setImage(old));}}>印を消して描き直す</button></div>:<Preview item={selected} width={width}/>}</div>
@@ -62,7 +62,7 @@ export function FinderEditor({api=siteApi}:{api?:ApiClient}){
   </main>
   {chat.restoreButton}
   <aside id={chat.panelId} tabIndex={-1} hidden={!chat.expanded} className="visual-chat-panel" aria-label="画面の修正チャット">
-   <div className="visual-chat-heading"><div><h3>画面の修正</h3><p className="small muted">お店さがしのページ</p></div><div className="chat-panel-heading-actions">{chat.collapseButton}</div></div>
+   <div className="visual-chat-heading"><div><h3>画面の修正</h3><p className="small muted">案内ページ</p></div><div className="chat-panel-heading-actions">{chat.collapseButton}</div></div>
    <p className="small">赤ペンで囲むか、変えたいことをそのまま書いてください。</p>
    <div className="visual-chat-view"><div className="visual-edit-history" role="group" aria-label="修正履歴"><button aria-label="前の状態に戻る" disabled={busy||index===0} onClick={()=>{setIndex(index-1);choose(history[index-1],false);}}>← 戻る</button><span>{index+1} / {history.length}</span><button aria-label="次の状態に進む" disabled={busy||index===history.length-1} onClick={()=>{setIndex(index+1);choose(history[index+1],false);}}>進む →</button></div><button disabled={busy||!editable} onClick={()=>image?clearCapture():void pen()}>{image?'画面を操作する':'赤ペンで囲む'}</button></div>
    <div ref={log} className="chat-log visual-chat-log" role="log" aria-label="画面の修正の会話">{[...state.proposals].reverse().map(p=><React.Fragment key={p.id}><article className="chat-message chat-message-user"><b>あなた</b><div className="pre-wrap">{p.request}</div>{!!p.imageIds?.length&&<div className="chat-message-images">{p.imageIds.map((id,i)=><MenuImage key={id} imageId={id} imageBase="/api/site/images" name={`添付画像${i+1}`} className="chat-message-image"/>)}</div>}</article><article className="chat-message chat-message-assistant"><b>Gemini</b><div className="pre-wrap">{p.summary.join('\n')}</div></article></React.Fragment>)}{!state.proposals.length&&<p className="small muted">例：見出しを変えたい、写真をここに置きたい、もっと明るい色にしたい。</p>}</div>

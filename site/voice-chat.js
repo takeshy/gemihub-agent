@@ -11,7 +11,7 @@ export class GuideVoice {
     panel.setAttribute("aria-label", this.words("音声で相談", "Voice conversation"));
     const label = node("label", this.words("話し相手", "Talk to")); label.htmlFor = "voice-target";
     this.select = node("select"); this.select.id = "voice-target";
-    for (const shop of [{ id: "", name: this.words("地域の案内・お店さがし", "Local guide and shops") }, ...shops.filter(shop => !!shop.networkUrl)]) {
+    for (const shop of [{ id: "", name: this.words("地域の案内", "Local guide") }, ...shops.filter(shop => !!shop.networkUrl)]) {
       const option = node("option", shop.name); option.value = shop.id; this.select.append(option);
     }
     label.append(this.select);

@@ -50,8 +50,8 @@ try {
   await context.route('https://maps.google.com/**',route=>route.fulfill({contentType:'text/html',body:'<html lang="ja"><p>地図のテスト表示</p></html>'}));
   const original=await readFile(join(root,'site/index.html'));console.log('checking viewport',width);
   await page.goto(base);await page.getByRole('button',{name:'AIでページを編集',exact:true}).click();await page.waitForURL(base+'/page-editor');
-  await expect(page.getByRole('heading',{name:'お店さがしのページ',exact:true})).toBeVisible();
-  await expect(page.frameLocator('iframe[title="お店さがしの変更プレビュー"]').locator('#hero-title')).toBeVisible();
+  await expect(page.getByRole('heading',{name:'案内ページ',exact:true})).toBeVisible();
+  await expect(page.frameLocator('iframe[title="案内ページの変更プレビュー"]').locator('#hero-title')).toBeVisible();
   if(width===390)await page.getByRole('button',{name:'スマホ',exact:true}).click();
   await page.getByRole('button',{name:'画像を添付',exact:true}).click();
   await page.getByLabel('画像をアップロード',{exact:true}).setInputFiles({name:'大きすぎる写真.png',mimeType:'image/png',buffer:Buffer.alloc(10*1024*1024+1)});

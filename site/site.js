@@ -10,6 +10,7 @@ import { ShopFrame } from "./shop-frame.js";
 import { LlmRelay } from "./llm-relay.js";
 import { aiConnection, mountAiConnection } from "./ai-connection.js";
 import { GuideVoice } from "./voice-chat.js";
+import { GUIDE_GREETING, guideGreeting } from "./guide-copy.js";
 
 /**
  * Boots the browser runtime in the page's assistant section.
@@ -27,7 +28,7 @@ export class AssistantMount {
     const english = document.documentElement.lang === "en";
     const reset = document.getElementById("ns-newchat");
     const input = document.getElementById("ns-input");
-    input.placeholder = english ? "Ask about shops or local information…" : "お店や地域の情報を相談…";
+    input.placeholder = english ? "Ask about local information, events or shops…" : "街の情報・イベント・お店について相談…";
     input.setAttribute("aria-label", english ? "Message to the AI" : "AIへのメッセージ");
     document.getElementById("ns-send").textContent = english ? "Send" : "送信";
     const menu = document.createElement("details");
@@ -56,7 +57,7 @@ export class AssistantMount {
   }
 
   static get GREETING() {
-    return "どんなお店をお探しですか？雑貨店などのお店紹介から、飲食店の予約相談までお手伝いします。";
+    return GUIDE_GREETING;
   }
 
   /**
@@ -110,7 +111,7 @@ export class AssistantMount {
         && (!booted.engine.byokKey || booted.engine.byokKey === "demo");
       status.textContent = needsKey
         ? "AIの設定を保存すると、チャットを始められます。"
-        : "AIの準備ができました。条件を伝えてください。";
+        : "AIの準備ができました。街について知りたいことを聞いてください。";
       AssistantMount.greet();
       App.mountChat();
       mountAISetup(booted.engine);
@@ -138,7 +139,7 @@ export class AssistantMount {
   static greet() {
     const first = document.querySelector("#ns-msgs .ns-msg.bot");
     if (first) {
-      first.textContent = document.getElementById("assistant")?.dataset.greeting || AssistantMount.GREETING;
+      first.textContent = guideGreeting(document.getElementById("assistant")?.dataset.greeting);
     }
   }
 

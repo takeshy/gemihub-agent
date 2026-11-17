@@ -69,7 +69,7 @@ export function createSiteEditor({ root, sourceRoot = codeRoot, generate, config
         await write(indexPath, page.html);
         await write(statePath, JSON.stringify(next, null, 2) + "\n", 0o600);
       } catch (error) { await atomicFile(indexPath, previous); await images.rollback(createdImages); throw error; }
-      return { ...status(next), message: "お店さがしに反映しました。" };
+      return { ...status(next), message: "案内ページに反映しました。" };
     }),
   };
 }

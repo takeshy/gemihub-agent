@@ -41,7 +41,7 @@ function createClient(scenario: Scenario): ApiClient {
       const source = [...state.proposals, ...state.versions].find(item => item.id === input.sourceId) || state.published;
       const next: Item = { id: `published-${state.versions.length + 1}`, at: "2026-11-16T05:30:00.000Z", summary: source.summary };
       state = { ...state, revision: String(Number(state.revision) + 1), published: next, versions: [next, ...state.versions] };
-      return { ...state, message: "お店さがしに反映しました。" };
+      return { ...state, message: "案内ページに反映しました。" };
     }
     // The image library of the request picker starts empty.
     if (/\/images$/.test(path) && data === undefined) return [];

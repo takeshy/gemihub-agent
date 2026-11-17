@@ -4542,7 +4542,14 @@ export function createApp(
       host: phoneHostFor(shop, shop.published, settings, caller, callSid, account && normalizeEmail(account.email)),
     };
   }, phoneConnector);
-  const publicLiveUpgrade = createPublicLiveUpgrade({ authorize: managedAi.authorizeLive, allowedOrigins: () => [origin(), ...(process.env.AGENT_PARENT_URL ? [new URL(process.env.AGENT_PARENT_URL).origin] : [])] });
+  const publicLiveUpgrade = createPublicLiveUpgrade({ authorize: managedAi.authorizeLive, allowedOrigins: async req => {
+    const host = (req.headers.host || "").split(":")[0].toLowerCase();
+    if (host === new URL(origin()).hostname) return [origin(), ...(process.env.AGENT_PARENT_URL ? [new URL(process.env.AGENT_PARENT_URL).origin] : [])];
+    const shops = await store.list<Shop>("shop");
+    const hosted = shops.some(shop => shop.published && !isArchivedShop(shop) && (!shop.judge || judgeActive()) &&
+      ((shop.domainVerified && shop.domain === host) || (process.env.SITE_DOMAIN && host === `${shop.slug}.${process.env.SITE_DOMAIN}`)));
+    return hosted ? [`https://${host}`] : [];
+  } });
   attachAssistantLive(server, async (req, shopId) => {
     const s = await session(store, req);
     const user = s?.user && isJudgeEmail(s.user.email) && !judgeActive() ? undefined : s?.user;

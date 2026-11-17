@@ -1,5 +1,7 @@
 /* Only the additional restaurant controls; the published storefront keeps its design. */
 .restaurant-ai-toggle { position: fixed; right: 20px; bottom: 20px; z-index: 20; border: 0; border-radius: 999px; padding: 12px 22px; background: #7a3b1d; color: #fff; font: 700 16px/1.5 system-ui, sans-serif; cursor: pointer; box-shadow: 0 4px 20px #0003; }
 body.assistant-open .restaurant-ai-toggle { display: none; }
+.shop-voice-controls { padding:8px 12px; border-top:1px solid var(--line, #d0d7de); }
+.shop-voice-controls .finder-voice-launcher { position:static; max-width:100%; box-shadow:none; }
 .restaurant-reservation-page [hidden], .restaurant-reservation[hidden], .restaurant-reservation [hidden], .assistant-sidebar[hidden] { display: none !important; }
 .restaurant-reservation, .assistant-sidebar { --shop-primary: #7a3b1d; --ink: #1f2328; --muted: #59636e; --line: #d0d7de; --soft: #f6f4f1; }

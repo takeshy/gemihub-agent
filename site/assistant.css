@@ -96,19 +96,3 @@ body > dialog button { margin-right: 8px; }
 
 /* The public finder does not expose the runtime's developer trace controls. */
 #agent-app .ns-devtoggle, #agent-app .ns-dev { display: none !important; }
-.finder-voice-launcher { position:fixed; z-index:55; right:16px; bottom:max(16px,env(safe-area-inset-bottom)); max-width:calc(100vw - 32px); padding:12px 18px; border:0; border-radius:999px; color:#fff; background:#28594b; box-shadow:0 4px 20px #0002; font:600 14px/1.5 system-ui,sans-serif; cursor:pointer; }
-.finder-voice { position:fixed; inset:0; margin:auto; width:min(480px,calc(100vw - 32px)); max-height:85dvh; overflow:auto; box-sizing:border-box; padding:24px; background:#fff; color:#253d35; border:1px solid #b9cebc; border-radius:16px; box-shadow:0 12px 48px #0003; font:14px/1.5 system-ui,sans-serif; }
-.finder-voice:not([open]) { display:none; }
-.finder-voice::backdrop { background:#152c2580; }
-.finder-voice-heading { display:flex; align-items:center; justify-content:space-between; gap:16px; }
-.finder-voice-heading h2 { margin:0; font-size:20px; }
-.finder-voice .finder-voice-close { min-width:44px; min-height:44px; padding:4px; color:#253d35; background:transparent; font-size:24px; }
-.finder-voice .finder-voice-mode { display:inline-block; margin:12px 0; padding:4px 10px; border-radius:999px; color:#28594b; background:#edf5ee; font-weight:600; }
-.finder-voice-controls { display:flex; align-items:end; gap:10px; }
-.finder-voice label { min-width:0; flex:1; font-weight:600; }
-.finder-voice select { display:block; width:100%; padding:8px 4px; font:inherit; }
-.finder-voice button { padding:10px; border:0; border-radius:7px; color:#fff; background:#28594b; font:inherit; white-space:nowrap; cursor:pointer; }
-.finder-voice p { margin:6px 0 0; overflow-wrap:anywhere; }
-.finder-voice #voice-status { font-size:12px; color:#58665f; }
-.finder-voice #voice-spoken { max-height:240px; overflow:auto; }
-@media (max-width:480px) { .finder-voice { padding:16px; } .finder-voice-controls { flex-direction:column; align-items:stretch; } }

@@ -243,7 +243,14 @@ export class AssistantMount {
         const { mountAISetup } = await import("./ai-setup.js");
         AssistantMount.setup = mountAISetup(booted.engine);
         mountAiConnection(booted.engine, connection);
+        if (connection?.config.voice) {
+          const { mountShopVoice } = await import("./shop-voice.js");
+          AssistantMount.voice = mountShopVoice(booted.engine, connection.config);
+        }
         if (!document.getElementById("assistant").hidden) AssistantMount.setup.openIfNeeded();
+      } else {
+        const { mountEmbeddedShopVoice } = await import("./shop-voice.js");
+        mountEmbeddedShopVoice();
       }
       status.textContent = relayed ? words.relay.open : needsKey ? words.needsKey : words.connected;
       if (!needsKey) {

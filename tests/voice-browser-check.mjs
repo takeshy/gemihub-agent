@@ -31,7 +31,7 @@ const fixtureProvider = async (_url, options) => {
     else if (latest.includes("灯")) delta = { content: "炉端 灯を開きました。お店とお話しください。" };
     else { const result = JSON.parse(receipts.at(-1).content).result; assert.equal(result.results[0].source, "図書館の利用案内.md"); delta = { content: "図書館は午前9時開館です。資料: 図書館の利用案内.md" }; }
   } else {
-    if (latest === "確認画面を見てから回答して" && !receipts.length) await new Promise(resolve => { releaseReview = resolve; });
+    if (latest === "確認画面を見てから回答して" && body.messages.at(-1)?.role === "user") await new Promise(resolve => { releaseReview = resolve; });
     // This is the selected shop's real assistant, loaded in its own frame with its own tools.
     if (body.tools.some(tool => tool.function.name === "website_get_reservation_page_state")) {
       delta = receipts.length ? { content: "炉端 灯です。席のみの予約も受け付けています。" } : tool("website_get_reservation_page_state", {});
@@ -60,7 +60,21 @@ try {
   const retailConfig = shopSchema.parse({ ...structuredClone(sample), industry: "other", name: "文具と器 こまど", products: ["作家の器", "手帳"], menus: [], staff: [], ownerBooking: true,
     hours: { start: "12:00", end: "21:00", closedWeekdays: [0, 1, 2, 3, 4, 5], holidays: [] } });
   await store.saveShop({ id: "komado", slug: "komado", owner: "komado-owner@example.com", published: retailConfig, publication: "public", draft: null, revision: 1, history: [] });
-  shop = createApp(store); shopOrigin = await listen(shop); process.env.APP_ORIGIN = shopOrigin;
+  shop = createApp(store);
+  const shopGateway = publicAi({ env: { GEMINI_API_KEY: serverKey }, state: memoryAiState(), fetch: fixtureProvider });
+  const [serveShop] = shop.listeners("request"); shop.removeListener("request", serveShop);
+  shop.on("request", async (req,res) => { if (!(await shopGateway.handle(req,res,[shopOrigin]))) serveShop(req,res); });
+  shop.removeAllListeners("upgrade");
+  shop.on("upgrade", createPublicLiveUpgrade({ authorize: shopGateway.authorizeLive, allowedOrigins: () => [shopOrigin], env: { GEMINI_API_KEY: serverKey }, connector: async parameters => {
+    liveParameters=parameters;
+    assert.deepEqual(parameters.config.tools[0].functionDeclarations.map(tool=>tool.name),["consult"]);
+    assert.match(String(parameters.config.systemInstruction), /current shop/);
+    return { close(){ended++;}, sendRealtimeInput(input){frames.push(input);}, sendToolResponse(value){
+      const response=value.functionResponses[0].response; voiceResults.push(response);
+      parameters.callbacks.onmessage({serverContent:{outputTranscription:{text:response.answer},modelTurn:{parts:[{inlineData:{data:"AAAAAA==",mimeType:"audio/pcm;rate=24000"}}]},turnComplete:true}});
+    }};
+  } }));
+  shopOrigin = await listen(shop); process.env.APP_ORIGIN = shopOrigin;
   const registry = { id: "akari", name: "炉端 灯", area: "東京", cuisine: "和食", pageUrl: shopOrigin + "/s/akari/", networkUrl: shopOrigin + "/s/akari/agent/reservation_concierge", reservationEnabled: false };
   await writeFile(join(scratch, "site/shop-registry.js"), `export const shops=${JSON.stringify([registry, { ...registry, id: "komado", name: "文具と器 こまど", cuisine: "雑貨", pageUrl: shopOrigin + "/s/komado", networkUrl: shopOrigin + "/s/komado/agent/shop_guide" }])};`);
   await writeFile(join(scratch, "site/chat-documents.json"), JSON.stringify({ version: 1, documents: [{ id: "library", name: "図書館の利用案内.md", text: "中央図書館は午前9時に開館します。", updatedAt: "2026-11-16" }] }));
@@ -151,15 +165,59 @@ try {
     await expect(page.locator("#finder-voice")).not.toBeVisible();
     await expect(page.locator("#voice-open")).toBeFocused();
     assert.equal(await page.evaluate(async () => (await import("./script.js")).App.voice.stream), null);
-    await page.locator("#voice-open").click();
+    await page.evaluate(async()=>{const{App}=await import("./script.js");App.shopFrame.open("komado");});
+    const embedded=page.frameLocator("#shop-page-frame");
+    await embedded.locator("#assistant-toggle").click();
+    await expect(embedded.locator("#assistant #voice-open")).toBeVisible();
+    await embedded.locator("#assistant #voice-open").click();
     await expect(page.locator("#voice-start")).toHaveText("■ 音声を終了");
+    await expect(page.locator("#voice-target")).toHaveValue("komado");
     await page.keyboard.press("Escape");
     await expect(page.locator("#finder-voice")).not.toBeVisible();
     assert.equal(await page.evaluate(async () => { const voice=(await import("./script.js")).App.voice; return !voice.stream && !voice.ws && !voice.input && !voice.output; }), true, "closing the dialog stops microphone, connection and audio contexts");
+    for(const slug of ["komado","akari"]) {
+      const standalone=await context.newPage(); standalone.on("pageerror",error=>errors.push(error.message));
+      await standalone.goto(`${shopOrigin}/s/${slug}/`);
+      await expect(standalone.locator("#voice-open")).toBeAttached({timeout:15000});
+      await expect(standalone.locator("#voice-open")).not.toBeVisible();
+      await standalone.locator("#assistant-toggle").click();
+      const launcher=standalone.locator("#assistant #voice-open");
+      await expect(launcher).toBeVisible();
+      assert.equal(await launcher.evaluate(button=>button.closest(".shop-voice-controls").nextElementSibling.classList.contains("ns-inputbar")),true);
+      await expect(standalone.locator("#finder-voice")).not.toBeVisible();
+      await standalone.screenshot({path:join(codeRoot,`test-results/voice/standalone-entry-${slug}-${width}.png`),fullPage:true});
+      await launcher.click();
+      const english=await standalone.locator("html").getAttribute("lang")==="en";
+      await expect(standalone.locator("#voice-start")).toHaveText(english?"■ End voice":"■ 音声を終了");
+      await expect(standalone.locator("#voice-target")).toHaveValue(slug);
+      await expect(standalone.locator("#voice-target")).toBeDisabled();
+      await expect(standalone.locator("#voice-target option")).toHaveCount(1);
+      const count=voiceResults.length;
+      emitQuestion(slug==="komado"?"営業時間と扱う品を教えてください":"席のみで予約できますか");
+      await expect.poll(()=>voiceResults.length).toBeGreaterThan(count);
+      await expect(standalone.locator("#voice-spoken")).toContainText(slug==="komado"?"作家の器と手帳":"席のみの予約も受け付けています");
+      if(slug==="komado" && width===1280) {
+        const replies=voiceResults.length; emitQuestion("確認画面を見てから回答して");
+        await expect.poll(()=>typeof releaseReview).toBe("function");
+        await standalone.evaluate(()=>{const dialog=document.createElement("dialog");dialog.id="local-voice-review";const button=document.createElement("button");button.textContent="確認を終える";button.onclick=()=>dialog.close();dialog.append(button);document.body.append(dialog);dialog.showModal();});
+        await expect(standalone.locator("#finder-voice")).not.toBeVisible();
+        assert.equal(await standalone.evaluate(async()=>!!(await import("./agent/site.js")).AssistantMount.voice.stream),true);
+        await standalone.getByRole("button",{name:"確認を終える",exact:true}).click();
+        await expect(standalone.locator("#finder-voice")).toBeVisible();
+        releaseReview();releaseReview=undefined;
+        await expect.poll(()=>voiceResults.length).toBeGreaterThan(replies);
+      }
+      assert.equal(await standalone.evaluate(()=>document.documentElement.scrollWidth>innerWidth),false);
+      await standalone.screenshot({path:join(codeRoot,`test-results/voice/standalone-${slug}-${width}.png`),fullPage:true});
+      await standalone.locator("#voice-close").click();
+      await expect(standalone.locator("#finder-voice")).not.toBeVisible();
+      await expect(launcher).toBeFocused();
+      await standalone.close();
+    }
     await context.close();
   }
   for (const request of shopRequests) assert.ok(!JSON.stringify(request).includes(serverKey));
-  assert.deepEqual(errors, []); assert.equal(ended, 4);
+  assert.deepEqual(errors, []); assert.equal(ended, 8);
   console.log(`PASS: real microphone PCM/WebSocket, guide document answers, voice-selected restaurant and other-industry shop, read-only shop MCP, shop chat/relay, return to guide and cleanup on desktop/mobile (${frames.length} audio frames, ${voiceResults.length} voice replies)`);
 } finally {
   await browser?.close();

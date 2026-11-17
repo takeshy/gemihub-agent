@@ -134,6 +134,10 @@ export class ShopFrame {
     const frame = this.element("shop-page-frame");
     if (!fromShopFrame(event, frame.contentWindow, this.shop)) return;
     const data = event.data;
+    if (data.shop === this.shop.id) {
+      if (data.type === "gemihub:voice-capabilities") { this.post({ type: "gemihub:voice-capabilities", shop: this.shop.id, available: typeof this.onVoiceOpen === "function" }); return; }
+      if (data.type === "gemihub:voice-open") { if (navigator.userActivation?.isActive) this.onVoiceOpen?.(); return; }
+    }
     const pending = this.voicePending;
     if (pending && data.channel === pending.channel && data.shop === this.shop.id) {
       if (data.type === "gemihub:voice-ready") { pending.ready = true; this.post({ type: "gemihub:voice-question", channel: pending.channel, id: pending.id, question: pending.question }); return; }

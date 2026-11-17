@@ -28,6 +28,8 @@ export const supportsShopAgent = (config: ShopConfig) => restaurantReservations(
 const networkFor = (shop: AgenticShop) => shop.config.industry === "other" ? shopGuideNetwork : networkName;
 const skillDir = resolve("agentic/skill");
 const siteDir = resolve("agentic/site");
+const sharedVoiceDir = resolve(siteDir, "../../../../site");
+const sharedVoiceFiles = new Set(["voice-chat.js", "voice-audio.js", "voice-chat.css"]);
 const runtimeDir = join(skillDir, "runtime");
 const run = promisify(execFile);
 const mcpProtocol = "2025-06-18";
@@ -43,7 +45,7 @@ const contentTypes: Record<string, string> = {
   ".map": "application/json; charset=utf-8",
 };
 /** The page's own modules and styles, served next to the generated bundle. */
-const siteFiles = new Set(["site.js", "ai-setup.js", "ai-connection.js", "reservation-actions.js", "reserve-page.js", "review-dialog.js", "llm-relay.js", "llm-relay-sw.js", "voice-bridge.js", "voice-turn.js", "assistant.css", "storefront-agent.css"]);
+const siteFiles = new Set(["site.js", "ai-setup.js", "ai-connection.js", "reservation-actions.js", "reserve-page.js", "review-dialog.js", "llm-relay.js", "llm-relay-sw.js", "voice-bridge.js", "voice-turn.js", "shop-voice.js", "assistant.css", "storefront-agent.css"]);
 /** Files other origins fetch: these, and only these, carry the CORS header. */
 const publicFiles = new Set(["agent-manifest.json", `${networkName}.network.json`, "links.json", "agent-mcp.json", ".well-known/nsdeploy.json", ".well-known/nsdeploy-agent.json"]);
 const generatedFiles = new Set([...publicFiles, "bridge/action-bridge.html", "bridge/agent-manifest.json"]);
@@ -220,8 +222,8 @@ export function storefrontAssistant(shop: AgenticShop, site: AgenticSite, reserv
   const base = site.base;
   const parent = parentSite();
   return {
-    attributes: ` data-slug="${escapeHtml(shop.slug)}"${guide ? ' data-agent-kind="shop"' : ""}${parent ? ` data-parent-origin="${escapeHtml(parent.origin)}"` : ""}`,
-    head: `<link rel="stylesheet" href="${base}/agent/assistant.css"><link rel="stylesheet" href="${base}/agent/storefront-agent.css"><link rel="agent-manifest" href="${base}/agent/agent-manifest.json"><script type="module" src="${base}/agent/reserve-page.js"></script><script type="module" src="${base}/agent/site.js"></script>`,
+    attributes: ` data-slug="${escapeHtml(shop.slug)}" data-shop-name="${escapeHtml(shop.config.name)}"${guide ? ' data-agent-kind="shop"' : ""}${parent ? ` data-parent-origin="${escapeHtml(parent.origin)}"` : ""}`,
+    head: `<link rel="stylesheet" href="${base}/agent/assistant.css"><link rel="stylesheet" href="${base}/agent/storefront-agent.css"><link rel="stylesheet" href="${base}/agent/voice-chat.css"><link rel="agent-manifest" href="${base}/agent/agent-manifest.json"><script type="module" src="${base}/agent/reserve-page.js"></script><script type="module" src="${base}/agent/site.js"></script>`,
     // Other pages keep backing controls hidden; /reserve owns its visible form.
     body: `${reservation ? "" : `<button id="assistant-toggle" class="restaurant-ai-toggle" type="button" aria-controls="assistant" aria-expanded="false" disabled>${t.askAI}</button>${guide ? "" : `<div id="restaurant-reservation" class="restaurant-reservation" hidden>${renderToStaticMarkup(createElement(RestaurantReservationForm, { config: shop.config }))}</div>`}`}${assistantPanel(t)}`,
     csp: pageCsp(parent ? parent.origin : "'none'"),
@@ -347,6 +349,7 @@ export function agenticSite(options: {
         return await file(res, method, path, headers) || notFound(res);
       }
       // The relay's service worker must control the reservation page, which sits one folder above it.
+      if (sharedVoiceFiles.has(rest)) return await file(res, method, join(sharedVoiceDir, rest)) || notFound(res);
       if (siteFiles.has(rest)) return await file(res, method, join(siteDir, rest), rest === "llm-relay-sw.js" ? { "Service-Worker-Allowed": `${site.base}/` } : undefined) || notFound(res);
       const guide = shop.config.industry === "other";
       if (!(guide ? guideFiles : generatedFiles).has(rest)) return notFound(res);

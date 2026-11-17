@@ -1,8 +1,8 @@
 import { runVisibleChatTurn } from "./voice-turn.js";
 
 export class GuideVoice {
-  constructor({ engine, shopFrame, shops, config, fetch: fetchImpl = (...args) => globalThis.fetch(...args) }) {
-    Object.assign(this, { engine, shopFrame, shops, fetch: fetchImpl });
+  constructor({ engine, shopFrame, shops = [], config, ownShop, launcherHost, fetch: fetchImpl = (...args) => globalThis.fetch(...args) }) {
+    Object.assign(this, { engine, shopFrame, shops, ownShop, fetch: fetchImpl });
     this.state = "off"; this.generation = 0; this.playing = new Set(); this.pending = new Map(); this.playAt = 0;
     if (!config?.voice) return;
     this.english = document.documentElement.lang === "en";
@@ -19,22 +19,19 @@ export class GuideVoice {
     const mode = node("p", this.words("音声モード", "Voice mode")); mode.className = "finder-voice-mode";
     const label = node("label", this.words("話し相手", "Talk to")); label.htmlFor = "voice-target";
     this.select = node("select"); this.select.id = "voice-target";
-    for (const shop of [{ id: "", name: this.words("地域の案内", "Local guide") }, ...shops.filter(shop => !!shop.networkUrl)]) {
+    for (const shop of ownShop ? [ownShop] : [{ id: "", name: this.words("地域の案内", "Local guide") }, ...shops.filter(shop => !!shop.networkUrl)]) {
       const option = node("option", shop.name); option.value = shop.id; this.select.append(option);
     }
     label.append(this.select);
+    this.select.disabled = !!ownShop;
     this.button = node("button", this.words("🎙 音声で話す", "🎙 Talk to AI")); this.button.id = "voice-start"; this.button.type = "button";
     this.status = node("p", this.words("音声は運営のGeminiを使います。", "Voice uses the site's Gemini.")); this.status.id = "voice-status"; this.status.setAttribute("role", "status");
     this.heard = node("p"); this.heard.id = "voice-heard";
     this.spoken = node("p"); this.spoken.id = "voice-spoken";
     this.spoken.setAttribute("aria-live", "polite");
     const row = node("div"); row.className = "finder-voice-controls"; row.append(label, this.button);
-    panel.append(header, mode, row, this.status, this.heard, this.spoken); document.body.append(this.launcher, panel);
-    this.launcher.addEventListener("click", () => {
-      if (!panel.open) panel.showModal();
-      this.launcher.setAttribute("aria-expanded", "true");
-      if (this.state === "off") void this.start();
-    });
+    panel.append(header, mode, row, this.status, this.heard, this.spoken); (launcherHost || document.body).append(this.launcher); document.body.append(panel);
+    this.launcher.addEventListener("click", () => this.open());
     close.addEventListener("click", () => panel.close());
     panel.addEventListener("close", () => { if (panel.open || this.reviewing) return; this.launcher.setAttribute("aria-expanded", "false"); this.stop(); this.launcher.focus({ preventScroll: true }); });
     panel.addEventListener("click", event => {
@@ -49,6 +46,7 @@ export class GuideVoice {
     });
     shopFrame.onChange = () => { for (const [id, controller] of this.pending) if (controller.shop && controller.shop !== shopFrame.shop) this.cancelQuestion(id, controller); this.silence(); this.heard.textContent = this.spoken.textContent = ""; this.updateTarget(); };
     shopFrame.onVoiceReview = open => this.review(open);
+    shopFrame.onVoiceOpen = () => this.open();
     this.button.addEventListener("click", () => this.state === "off" ? void this.start() : this.stop());
     document.getElementById("ns-newchat")?.addEventListener("click", () => this.stop());
     document.getElementById("ai-settings-open")?.addEventListener("click", () => this.stop());
@@ -56,6 +54,11 @@ export class GuideVoice {
     this.updateTarget();
   }
   words(ja, en) { return this.english ? en : ja; }
+  open() {
+    if (!this.dialog.open) this.dialog.showModal();
+    this.launcher.setAttribute("aria-expanded", "true");
+    if (this.state === "off") void this.start();
+  }
   review(open) {
     if (open && this.dialog?.open) {
       this.reviewing = true; this.dialog.close(); this.launcher.setAttribute("aria-expanded", "false");
@@ -105,7 +108,7 @@ export class GuideVoice {
       context.createMediaStreamSource(stream).connect(node); node.connect(context.destination);
       const ws = new WebSocket(`${location.protocol === "https:" ? "wss:" : "ws:"}//${location.host}/api/ai/live`); this.ws = ws;
       this.connectionTimer = setTimeout(() => { if (generation === this.generation) this.stop(this.words("音声に接続できませんでした。もう一度お試しください。", "Voice could not connect. Please try again.")); }, 20000);
-      ws.onopen = () => { if (this.ws === ws) ws.send(JSON.stringify({ type: "start", token: session.token, language: document.documentElement.lang || "ja" })); };
+      ws.onopen = () => { if (this.ws === ws) ws.send(JSON.stringify({ type: "start", token: session.token, language: document.documentElement.lang || "ja", ...(this.ownShop ? { scope: "shop" } : {}) })); };
       node.port.onmessage = event => {
         if (this.state !== "on" || this.ws !== ws || ws.readyState !== WebSocket.OPEN || ws.bufferedAmount > 128000) return;
         const samples = event.data, bytes = new Uint8Array(samples.length * 2), pcm = new DataView(bytes.buffer);
@@ -128,7 +131,7 @@ export class GuideVoice {
       if (this.pending.has(message.id)) return;
       const controller = new AbortController();
       // Return to the guide before registering this question; changing the target cancels earlier questions.
-      if (message.guide && this.shopFrame.shop) this.shopFrame.close();
+      if (!this.ownShop && message.guide && this.shopFrame.shop) this.shopFrame.close();
       this.pending.set(message.id, controller);
       this.status.textContent = this.words("調べています。確認画面が出たら内容を確認してください。", "Checking. Review any confirmation shown on screen.");
       const target = this.shopFrame.shop;

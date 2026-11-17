@@ -129,7 +129,7 @@ export async function previewDesign(config, shops, root = codeRoot, images) {
   const remove = []; walk(doc, n => { if (["script", "iframe", "noscript"].includes(n.tagName) || n.tagName === "link" && attr(n, "rel") === "stylesheet") remove.push(n); if (n.tagName === "a") n.attrs = n.attrs.filter(a => !["href", "target"].includes(a.name)); if (["button", "input", "textarea", "select"].includes(n.tagName)) set(n, "disabled", ""); });
   for (const n of remove) n.parentNode.childNodes.splice(n.parentNode.childNodes.indexOf(n), 1);
   const previewCss = '#agent-app .ns-chat{display:flex;flex-direction:column;min-height:480px;border:1px solid var(--ns-border);border-radius:12px;color:var(--ns-fg);font-family:var(--ns-font)}#agent-app .ns-msgs{flex:1;padding:20px}#agent-app .ns-msg{background:var(--ns-msgbg);padding:14px;border-radius:12px;white-space:pre-wrap}#agent-app .ns-inputbar{display:flex;gap:8px;padding:12px;border-top:1px solid var(--ns-border)}#agent-app textarea{min-width:0;flex:1;resize:none}#agent-app button{background:var(--ns-primary);color:white}';
-  const css = (await Promise.all(["assistant.css", "style.css"].map(f => readFile(join(root, "site", f), "utf8")))).join("\n") + "\n" + previewCss + "\n" + page.css;
+  const css = (await Promise.all(["assistant.css", "voice-chat.css", "style.css"].map(f => readFile(join(root, "site", f), "utf8")))).join("\n") + "\n" + previewCss + "\n" + page.css;
   const style = parseFragment('<style></style>').childNodes[0]; content(style, css); find(doc, n => n.tagName === "head").childNodes.push(style);
   return serialize(doc);
 }

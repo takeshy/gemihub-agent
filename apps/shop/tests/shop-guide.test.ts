@@ -76,7 +76,7 @@ test("other shop pages and custom hosts serve an actionable chat/voice guide wit
     assert.equal((await rpc("tools/call", { name: "check_availability" })).error.code, -32602);
     assert.equal((await rpc("tools/call", { name: "place_reservation" })).error.code, -32602);
     assert.equal((await rpc("tools/call", { name: "get_shop_info", arguments: { stock: true } })).result.isError, true);
-    for (const file of ["site.js", "reserve-page.js", "voice-bridge.js", "voice-turn.js", "runtime/index.js"]) assert.equal((await call(base + "/agent/" + file, undefined, host)).status, 200);
+    for (const file of ["site.js", "reserve-page.js", "voice-bridge.js", "voice-turn.js", "shop-voice.js", "voice-chat.js", "voice-chat.css", "voice-audio.js", "runtime/index.js"]) assert.equal((await call(base + "/agent/" + file, undefined, host)).status, 200);
     assert.equal((await call(base + "/agent/reservation_concierge.network.json", undefined, host)).status, 404);
     assert.equal((await call(base + "/reserve", undefined, host)).status, 404);
   }

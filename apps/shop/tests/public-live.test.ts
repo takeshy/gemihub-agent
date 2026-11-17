@@ -13,7 +13,7 @@ test("public voice authenticates the site session, fixes model/tools, relays PCM
   const env = { GEMINI_API_KEY: "server-voice-secret", SESSION_SECRET: "fixture-secret", PUBLIC_AI_LIVE_MODEL: "fixture-live-model" };
   const gateway = publicAi({ env, state: memoryAiState() });
   const server = createServer((req, res) => { void gateway.handle(req, res, [base]); });
-  server.on("upgrade", createPublicLiveUpgrade({ env, authorize: gateway.authorizeLive, allowedOrigins: () => [base], connector: async value => {
+  server.on("upgrade", createPublicLiveUpgrade({ env, authorize: gateway.authorizeLive, allowedOrigins: async () => [base], connector: async value => {
     parameters = value;
     return { sendRealtimeInput(input: unknown) { audio.push(input); }, sendToolResponse(input: unknown) { replies.push(input); }, close() { ended++; } } as unknown as Session;
   } }));
@@ -53,6 +53,20 @@ test("public voice authenticates the site session, fixes model/tools, relays PCM
   assert.deepEqual(await next, { type: "cancel", id: switching.id });
   const closed = once(ws, "close"); ws.close(); await closed;
   assert.equal(ended, 1);
+  const shopSocket=await open();
+  const shopMessage=()=>once(shopSocket,"message").then(([data])=>JSON.parse(String(data)));
+  next=shopMessage(); shopSocket.send(JSON.stringify({type:"start",token:session.token,language:"ja",scope:"shop"}));
+  assert.equal((await next).type,"ready");
+  assert.deepEqual((parameters!.config!.tools![0] as any).functionDeclarations.map((tool:any)=>tool.name),["consult"]);
+  assert.match(String(parameters!.config!.systemInstruction),/current shop/);
+  const repliesBefore=replies.length;
+  deliver({toolCall:{functionCalls:[{id:"wrong-scope",name:"ask_guide",args:{question:"switch shops"}}]}});
+  assert.equal(replies.length,repliesBefore+1);
+  assert.ok(replies.at(-1).functionResponses[0].response.error);
+  next=shopMessage();deliver({toolCall:{functionCalls:[{id:"shop-question",name:"consult",args:{question:"What does this shop sell?"}}]}});
+  assert.equal((await next).guide,false);
+  const shopClosed=once(shopSocket,"close");shopSocket.close();await shopClosed;
+  assert.equal(ended,2);
   const invalid = await open();
   const refused = once(invalid, "close"); invalid.send(JSON.stringify({ type: "start", token: "forged", language: "ja" }));
   assert.equal((await refused)[0], 1008);

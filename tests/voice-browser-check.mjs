@@ -17,7 +17,7 @@ let finder, shop, store, browser, liveParameters;
 const textCalls = [], voiceResults = [], frames = [], errors = [], shopRequests = [];
 let finderOrigin, shopOrigin, ended = 0;
 const serverKey = "fixture-server-key-not-public";
-let releaseReview;
+let releaseReview, refuseNextVoice = false;
 const fixtureProvider = async (_url, options) => {
   const body = JSON.parse(options.body); textCalls.push(body);
   const receipts = body.messages.filter(message => message.role === "tool");
@@ -90,6 +90,7 @@ try {
     } catch { res.writeHead(404); res.end(); }
   });
   finder.on("upgrade", createPublicLiveUpgrade({ authorize: gateway.authorizeLive, allowedOrigins: () => [finderOrigin], env: { GEMINI_API_KEY: serverKey }, connector: async parameters => {
+    if (refuseNextVoice) { refuseNextVoice = false; throw Object.assign(new Error("quota fixture"), { status: 429 }); }
     liveParameters = parameters;
     return { close() { ended++; }, sendRealtimeInput(input) { frames.push(input); }, sendToolResponse(value) {
       const response = value.functionResponses[0].response; voiceResults.push(response);
@@ -104,7 +105,7 @@ try {
     await context.addInitScript(() => {
       if (!navigator.mediaDevices) return;
       const original = navigator.mediaDevices.getUserMedia.bind(navigator.mediaDevices);
-      navigator.mediaDevices.getUserMedia = async constraints => { try { return await original(constraints); } catch (error) { console.error("Microphone fixture:", error.name, error.message); throw error; } };
+      navigator.mediaDevices.getUserMedia = async constraints => { try { const stream = await original(constraints); window.__voiceTestStream = stream; return stream; } catch (error) { console.error("Microphone fixture:", error.name, error.message); throw error; } };
     });
     const page = await context.newPage(); page.on("pageerror", error => errors.push(error.message));
     page.on("console", message => { if (message.type() === "error") console.error(message.text().slice(0, 300)); });
@@ -258,6 +259,15 @@ try {
       await expect(launcher).toBeVisible();
       await expect(launcher).toBeFocused();
       await standalone.close();
+    }
+    if (width === 1280) {
+      refuseNextVoice = true;
+      await page.locator("#shop-close").click();
+      await page.locator("#voice-open").click();
+      await expect(page.locator("#voice-status")).toContainText("音声の利用上限に達しました");
+      assert.equal(await page.evaluate(async () => { const voice = (await import("./script.js")).App.voice; return !voice.stream && !voice.ws && !voice.input && !voice.output && window.__voiceTestStream.getTracks().every(track => track.readyState === "ended"); }), true, "quota errors release the microphone and keep their specific message after the socket closes");
+      await page.locator("#voice-close").click();
+      await expect(page.locator("#voice-open")).toBeVisible();
     }
     await context.close();
   }

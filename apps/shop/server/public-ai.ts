@@ -72,7 +72,7 @@ export function publicAi({ env = process.env, fetch: fetchImpl = globalThis.fetc
       const requestOrigin = String(req.headers.origin || "");
       const session = verify(token);
       if (!enabled || env.PUBLIC_AI_VOICE === "false" || !session || session.origin !== requestOrigin || !allowedOrigins.includes(requestOrigin)) throw failure(403, "Voice session refused");
-      if (liveActive >= 2) throw failure(429, "Voice sessions busy");
+      if (liveActive >= 2) throw Object.assign(failure(429, "Voice sessions busy"), { code: "voice_busy" });
       liveActive++;
       let released = false;
       const release = () => { if (!released) { released = true; liveActive--; } };
@@ -85,7 +85,11 @@ export function publicAi({ env = process.env, fetch: fetchImpl = globalThis.fetc
           { id: hash(`live:session:${hour}:${session.sid}`), limit: 4, expiresAt: new Date((hour + 2) * 3600000) },
         ]);
         return release;
-      } catch (error) { release(); throw error; }
+      } catch (error) {
+        release();
+        if ((error as { status?: number })?.status === 429) Object.assign(error as object, { code: "voice_limit" });
+        throw error;
+      }
     },
     async handle(req: IncomingMessage, res: ServerResponse, allowedOrigins: string[]): Promise<boolean> {
       const path = (req.url || "").split("?")[0]; if (!path.startsWith("/api/ai/")) return false;

@@ -28,7 +28,7 @@ test("public voice authenticates the site session, fixes model/tools, relays PCM
   let next = message(); ws.send(JSON.stringify({ type: "start", token: session.token, language: "en" }));
   assert.equal((await next).type, "ready");
   const lease = await gateway.authorizeLive({ headers: { origin: base }, socket: { remoteAddress: "extra-client" } } as any, session.token, [base]);
-  await assert.rejects(gateway.authorizeLive({ headers: { origin: base }, socket: { remoteAddress: "third-client" } } as any, session.token, [base]), { status: 429 });
+  await assert.rejects(gateway.authorizeLive({ headers: { origin: base }, socket: { remoteAddress: "third-client" } } as any, session.token, [base]), { status: 429, code: "voice_busy" });
   lease(); lease();
   assert.equal(parameters!.model, "fixture-live-model");
   assert.ok(String(parameters!.config!.systemInstruction).includes("UI locale en"));
@@ -90,7 +90,30 @@ test("voice admission shares persistent quotas, caps concurrent sessions and rel
     token = (await (await fetch(`http://127.0.0.1:${(server.address() as any).port}/api/ai/session`, { method: "POST", headers: { Origin: base, "Content-Type": "application/json" }, body: "{}" })).json()).token;
     const req = { headers: { origin: base }, socket: { remoteAddress: "same-client" } } as any;
     const release = await gateway.authorizeLive(req, token, [base]); release(); release();
-    await assert.rejects(gateway.authorizeLive(req, token, [base]), { status: 429 });
+    await assert.rejects(gateway.authorizeLive(req, token, [base]), { status: 429, code: "voice_limit" });
     await assert.rejects(gateway.authorizeLive({ ...req, headers: { origin: "https://evil.example" } }, token, [base]), { status: 403 });
   } finally { server.closeAllConnections(); await new Promise<void>(resolve => server.close(() => resolve())); }
+});
+
+test("voice admission sends a safe reason before closing and never connects a rejected session", async t => {
+  let base = "", code = "voice_limit", connects = 0;
+  const server = createServer((_req, res) => res.end());
+  server.on("upgrade", createPublicLiveUpgrade({
+    allowedOrigins: () => [base],
+    authorize: async () => { throw Object.assign(new Error("must-not-leak-provider-credentials"), { status: 429, code }); },
+    connector: async () => { connects++; throw new Error("must not connect"); },
+  }));
+  await new Promise<void>(resolve => server.listen(0, "127.0.0.1", resolve));
+  base = `http://127.0.0.1:${(server.address() as any).port}`;
+  t.after(async () => { server.closeAllConnections(); await new Promise<void>(resolve => server.close(() => resolve())); });
+  for (code of ["voice_limit", "voice_busy"]) {
+    const ws = new WebSocket(base.replace("http:", "ws:") + "/api/ai/live", { headers: { Origin: base } });
+    await once(ws, "open");
+    const next = once(ws, "message"), closed = once(ws, "close");
+    ws.send(JSON.stringify({ type: "start", token: "fixture-token", language: "ja" }));
+    const [raw] = await next;
+    assert.deepEqual(JSON.parse(String(raw)), { type: "error", code });
+    assert.equal((await closed)[0], 1008);
+  }
+  assert.equal(connects, 0);
 });

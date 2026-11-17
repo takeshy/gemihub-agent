@@ -135,6 +135,15 @@ export class GuideVoice {
     } catch { if (generation === this.generation) this.stop(this.words("マイクや音声AIに接続できませんでした。マイクの許可と接続状態を確認してください。", "Could not connect the microphone or voice AI. Check microphone permission and connection.")); }
   }
   message(message, ws) {
+    if (message.type === "error") {
+      const errors = {
+        voice_limit: ["音声の利用上限に達しました。時間をおいて、もう一度お試しください。", "The voice usage limit has been reached. Please try again later."],
+        voice_busy: ["音声AIが使用中です。ほかの音声会話を終了してから、もう一度お試しください。", "Voice AI is busy. End another voice conversation and try again."],
+        voice_session: ["音声の接続期限が切れました。ページを再読み込みしてください。", "Your voice session has expired. Reload this page."],
+        voice_unavailable: ["音声AIに接続できませんでした。少し待ってから、もう一度お試しください。", "Could not connect to voice AI. Please try again shortly."],
+      };
+      this.stop(this.words(...(errors[message.code] || errors.voice_unavailable))); return;
+    }
     if (message.type === "ready") { clearTimeout(this.connectionTimer); this.state = "on"; this.button.textContent = this.words("■ 音声を終了", "■ End voice"); this.status.textContent = this.words("お話しください。AIが声で答えます。", "Speak now. The AI will answer aloud."); }
     if (message.type === "heard") this.heard.textContent = (this.heard.textContent + message.text).slice(-4000);
     if (message.type === "spoken") this.spoken.textContent = (this.spoken.textContent + message.text).slice(-4000);

@@ -7,6 +7,7 @@ import { Presentation } from "../src/Presentation.tsx";
 import { sample, shopSchema } from "../server/domain.ts";
 import { initialThemeConfig, createInitialTheme, normalizeInitialNavigation, initialThemePreview, type ThemeRun } from "../server/initial-theme.ts";
 import { initialIntroductionPages } from "../shared/initial-pages.ts";
+import { screenStarter } from "../shared/screens.ts";
 import { managedImageIds, withInlineImages } from "../server/image-references.ts";
 import { validateProposedImages } from "../server/request-images.ts";
 import { initialInterviewFacts, openingQuestions, logoQuestion, logoUploadQuestion, initialFeatureQuestion, initialSetupDemoReply, additionalPagesQuestion } from "../server/request-intent.ts";
@@ -102,6 +103,20 @@ test("duplicate theme menus are repaired before review without hiding unsafe mar
   const unsafe={...candidate,headerHtml:candidate.headerHtml.replace('ご予約</a>', 'ご予約<script>alert(1)</script></a>')};
   assert.deepEqual(normalizeInitialNavigation(unsafe,config),unsafe,"normalization must not hide a validation error");
   assert.equal(themeSchema.safeParse(normalizeInitialNavigation(unsafe,config)).success,false);
+});
+
+test("reservation-free themes leave out booking screens and links even if a reference includes them", () => {
+  const about = screenStarter("about");
+  const config = initialThemeConfig({
+    ...sample, industry: "other", reservationsEnabled: false,
+    screens: { about, reserve: screenStarter("reserve"), mine: screenStarter("mine") },
+  }, []);
+  assert.deepEqual(config.screens, { about });
+  const normalized = normalizeInitialNavigation({
+    ...theme, footerHtml: '<footer><a href="/?pane=mine">My page</a><a href="/s/stationery/reserve">Book</a><a href="https://example.com">External</a><slot name="content"></slot></footer>',
+  }, config) as typeof theme;
+  assert.doesNotMatch(normalized.footerHtml, /pane=mine|stationery\/reserve/);
+  assert.match(normalized.footerHtml, /https:\/\/example\.com/);
 });
 
 test("preview rejects unmanaged images, and a deliberate retry repairs an exhausted run using its saved feedback", async () => {

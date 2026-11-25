@@ -25,7 +25,7 @@ export { sampleQueries };
 export const networkName = "reservation_concierge";
 export const frontAgent = "reservation_front";
 export const supportsShopAgent = (config: ShopConfig) => restaurantReservations(config) || config.industry === "other";
-const networkFor = (shop: AgenticShop) => shop.config.industry === "other" ? shopGuideNetwork : networkName;
+export const shopNetworkName = (config: Pick<ShopConfig, "industry">) => config.industry === "other" ? shopGuideNetwork : networkName;
 const skillDir = resolve("agentic/skill");
 const siteDir = resolve("agentic/site");
 const sharedVoiceDir = resolve(siteDir, "../../../../site");
@@ -64,7 +64,7 @@ const themeColor = (config: ShopConfig) => ({ sage: "#3f5d4a", rose: "#8a3d52", 
 export function shopManifest(shop: AgenticShop, site: AgenticSite) {
   const name = shop.config.name;
   const guide = shop.config.industry === "other";
-  const network = networkFor(shop);
+  const network = shopNetworkName(shop.config);
   const front = guide ? shopGuideFront : frontAgent;
   return {
     brand: guide ? `${name} ご案内` : agentCopy.brand(name),
@@ -107,7 +107,7 @@ export function shopManifest(shop: AgenticShop, site: AgenticSite) {
 export async function shopHocon(shop: AgenticShop, site: AgenticSite) {
   const name = shop.config.name;
   const guide = shop.config.industry === "other";
-  const template = await readFile(join(siteDir, `${networkFor(shop)}.hocon`), "utf8");
+  const template = await readFile(join(siteDir, `${shopNetworkName(shop.config)}.hocon`), "utf8");
   const values: Record<string, unknown> = {
     __DESCRIPTION__: guide ? `${name}の営業時間と取扱品をご案内します。` : agentCopy.networkDescription(name),
     __SAMPLE_QUERIES__: guide ? shopGuideQueries() : sampleQueries(),
@@ -123,7 +123,7 @@ export async function shopHocon(shop: AgenticShop, site: AgenticSite) {
 const builds = new Map<string, Promise<string>>();
 /** Build (once per content) the shop's bundle with the official script; returns its folder. */
 export async function shopBundle(shop: AgenticShop, site: AgenticSite) {
-  const network = networkFor(shop);
+  const network = shopNetworkName(shop.config);
   const hocon = await shopHocon(shop, site);
   const manifest = JSON.stringify(shopManifest(shop, site), null, 2) + "\n";
   const script = join(skillDir, "scripts/build_network.mjs");

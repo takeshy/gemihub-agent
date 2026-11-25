@@ -2,7 +2,8 @@ import { tr } from "../shared/i18n.ts";
 import { z } from "zod";
 import { shopSchema, planSummary, type ShopConfig } from "./domain.ts";
 import { screenIds, screenSlots, screenStarter, screensSchema } from "../shared/screens.ts";
-import { storefrontCopyKeys, storefrontCopySchema, storefrontText } from "../shared/storefront-copy.ts";
+import { screenCopyKeys, storefrontCopyKeys, storefrontCopySchema, storefrontText } from "../shared/storefront-copy.ts";
+import { storefrontScreenAvailable } from "../shared/navigation.ts";
 import { compactTheme, defaultAppearance, showsHeaderEyebrow, standardTheme, themeComponentInstruction } from "../shared/theme-editing.ts";
 import { same, partValue, replacePart, withHeaderCopy, withPartTheme, headerSchema, footerSchema, pageSchema } from "./pages.ts";
 import { themeSchema } from "../shared/presentation.ts";
@@ -139,8 +140,9 @@ export const visualTargets = (c: ShopConfig) => [
   { id: "address", label: tr("アクセス：{0}", c.address) },
   { id: "appearance", label: tr("ページ全体の色・配置・紹介画像・見出し・案内文") },
   ...styleComponents.filter(component => component !== "base").map(component => ({ id: `component:${component}`, label: tr("共通部品：{0}", componentLabel(component)) })),
-  ...storefrontCopyKeys.filter(key => !(key.startsWith("about") && c.screens?.about) && !(key === "headerEyebrow" && !showsHeaderEyebrow(c.appearance?.theme))).map(key => ({ id: `copy:${key}`, label: tr("画面の文言：{0}", storefrontText(c, key)) })),
-  ...screenIds.map(id => ({ id: `screen:${id}`, label: tr("画面の見出し・案内文・画像・配置：{0}", storefrontText(c, ({ about: "navAbout", reserve: "navReserve", mine: "navMine", contact: "navContact" } as const)[id])) })),
+  ...storefrontCopyKeys.filter(key => !(key.startsWith("about") && c.screens?.about) && !(key === "headerEyebrow" && !showsHeaderEyebrow(c.appearance?.theme))
+    && (storefrontScreenAvailable(c, "reserve") || !["navReserve", "navMine", "mineBookings", ...screenCopyKeys.reserve].includes(key))).map(key => ({ id: `copy:${key}`, label: tr("画面の文言：{0}", storefrontText(c, key)) })),
+  ...screenIds.filter(id => storefrontScreenAvailable(c, id)).map(id => ({ id: `screen:${id}`, label: tr("画面の見出し・案内文・画像・配置：{0}", storefrontText(c, ({ about: "navAbout", reserve: "navReserve", mine: "navMine", contact: "navContact" } as const)[id])) })),
   { id: "part:header", label: tr("共通ヘッダーの見出し・紹介文・画像・ナビゲーション") },
   { id: "part:footer", label: tr("共通フッターの本文・配置") },
   ...c.menus.filter(m => m.active).map(m => ({ id: `menu:${m.id}`, label: tr("メニュー名：{0}", m.name) })),
@@ -189,7 +191,7 @@ export function validateVisualChange(before: ShopConfig, input: ShopConfig, targ
   }
   else if (target.startsWith("screen:")) {
     const id = screenIds.find(id => target === `screen:${id}`);
-    if (!id) throw Object.assign(new Error(tr("変更対象を選び直してください")), { status: 400 });
+    if (!id || !storefrontScreenAvailable(before, id)) throw Object.assign(new Error(tr("変更対象を選び直してください")), { status: 400 });
     allowed.screens = { ...allowed.screens, [id]: next.screens?.[id] };
   }
   else if (target === "part:header" || target === "part:footer") {

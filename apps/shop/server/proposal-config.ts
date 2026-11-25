@@ -13,7 +13,10 @@ function merge(base: unknown, patch: unknown): unknown {
 /** Materialize changed-field proposals before the same full validation and approval gates. */
 export function proposalConfig(value: unknown, current: ShopConfig): ShopConfig {
   const complete = shopSchema.safeParse(value);
-  if (complete.success) return complete.data;
+  if (complete.success) {
+    if (complete.data.reservationsEnabled !== undefined || current.reservationsEnabled === undefined) return complete.data;
+    return shopSchema.parse({ ...complete.data, reservationsEnabled: current.reservationsEnabled });
+  }
   if (!object(value)) throw complete.error;
   return shopSchema.parse(merge(current, value));
 }

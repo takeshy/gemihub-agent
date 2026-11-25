@@ -5,6 +5,8 @@ export type RequestIntent = z.infer<typeof requestIntentSchema>;
 export const initialFeatureQuestion = "お店の紹介・予約・お問い合わせは必須の機能です。\n追加したい機能を次から選んでください。\n1. ブログ\n2. お知らせ\n3. スタッフ紹介\n4. 商品・サービス紹介\n\n番号でも言葉でも、複数選べます。不要なら「なし」と答えてください。";
 export const restaurantFeatureQuestion = "予約受付と追加したい機能を選んでください。\n1. 予約あり（予約フォーム・AI相談）\n2. 予約なし（店舗情報のみ）\n3. ブログ\n4. お知らせ\n5. スタッフ紹介\n6. 商品・サービス紹介\n\n予約は1か2のどちらかを選んでください。追加したい機能は複数選べます。番号でも言葉でも回答できます。";
 export const reservationChoiceQuestion = "予約は受け付けますか？\n1. 予約あり（予約フォーム・AI相談）\n2. 予約なし（店舗情報のみ）";
+export const otherFeatureQuestion = "予約受付と追加したい機能を選んでください。\n1. 予約あり\n2. 予約なし\n3. ブログ\n4. お知らせ\n5. スタッフ紹介\n6. 商品・サービス紹介\n\n予約は1か2のどちらかを選んでください。追加したい機能は複数選べます。番号でも言葉でも回答できます。";
+export const otherReservationChoiceQuestion = "予約は受け付けますか？\n1. 予約あり\n2. 予約なし";
 export const additionalPagesQuestion = "それ以外に欲しいページはありますか？";
 export const finalDetailsQuestion = "ほかに伝えたいことはありますか？";
 export const shopNameQuestion = "お店の名前を教えてください。";
@@ -22,6 +24,7 @@ function numberedFeatures(text: string) {
 const reservationDisabled = (text: string) => /(?<!電話|でんわ|TEL|当日|phone\s|telephone\s|same-day\s|walk-in\s)(?:予約|reservations?|bookings?)(?:受付|機能)?\s*(?:は|を|も|[:：])?\s*(?:なし|無し|不要|いらな|要らな|しな|受け付け(?:ない|ません)|付けな|つけな|no\b|off\b|disabled\b)|(?:no|without|disable|omit)\s+(?:online\s+)?(?:reservations?|bookings?)|(?:店舗情報|お店の紹介|紹介ページ)(?:のみ|だけ)(?:で(?:いい|良い|よい|結構|大丈夫|OK|お願い|十分)|にし|がいい|が良い|[)）]|[。.!！\s]*$)/i.test(text);
 const reservationIncluded = (text: string) => /(?:予約|reservations?|bookings?)(?:受付|機能)?\s*(?:は|を|も|[:：])?\s*(?:あり|有り|必要|希望|付け|つけ|受け付ける|する|on\b|enabled\b)|(?:accept|enable|with)\s+(?:online\s+)?(?:reservations?|bookings?)|紹介と予約だけ/i.test(text);
 const restaurantRequested = (text: string) => /飲食|レストラン|カフェ|居酒屋|食堂|restaurant|café|cafe/i.test(text);
+export const otherShopRequested = (text: string) => /文具店|文房具店|雑貨店|書店|花屋|小売|その他のお店|stationery|bookshop|bookstore|florist|retail|other shop/i.test(text);
 function numberedReservations(text: string) {
   const options = new Map(numberedLines(text)
     .filter(([, line]) => /予約|reservations?|bookings?/i.test(line))
@@ -41,6 +44,7 @@ const asksFinalDetails = (text: string) => /(?:ほか|他)に伝えたいこと�
 export function initialInterviewFacts(messages: { role: string; text: string; detail?: { imageIds?: string[] } }[]) {
   let name: string | undefined; let logoKnown = false; let awaiting: "name" | "logo" | "features" | undefined;
   let reservationsEnabled: boolean | undefined;
+  let offeredReservationChoice = false;
   let reservationChoices = new Map<number, boolean>();
   let articles: { blogs: boolean; announcements: boolean } | undefined;
   let introductions: { staff: boolean; products: boolean } | undefined;
@@ -54,6 +58,7 @@ export function initialInterviewFacts(messages: { role: string; text: string; de
       else {
         const options = numberedFeatures(message.text);
         reservationChoices = numberedReservations(message.text);
+        offeredReservationChoice ||= reservationChoices.size > 0;
         if ([initialFeatureQuestion, tr(initialFeatureQuestion), restaurantFeatureQuestion, tr(restaurantFeatureQuestion), reservationChoiceQuestion, tr(reservationChoiceQuestion)].includes(message.text) || reservationChoices.size || options.size >= 2 && ([...options.values()].some(kinds => kinds.includes("blogs") || kinds.includes("announcements")) || /機能|features/i.test(message.text))) {
           awaiting = "features"; choices = options.size ? options : numberedFeatures(initialFeatureQuestion);
         }
@@ -93,8 +98,10 @@ export function initialInterviewFacts(messages: { role: string; text: string; de
     if (/商品.{0,12}(?:紹介|ページ)|サービス紹介|product.{0,12}(?:page|introduction)/i.test(message.text) && !/商品.{0,8}(?:不要|なし|いらな)|no product/i.test(message.text)) introductions = { staff: introductions?.staff || false, products: true };
     awaiting = undefined;
   }
-  const needsReservationChoice = restaurantRequested(messages.filter(message => message.role === "user").map(message => message.text).join("\n")) && articles !== undefined && reservationsEnabled === undefined;
-  return { name, logoKnown, reservationsEnabled, articles, introductions, question: !name ? tr(shopNameQuestion) : !logoKnown ? tr(messages.filter(m => m.role === "assistant").some(m => [logoQuestion, tr(logoQuestion), logoUploadQuestion, tr(logoUploadQuestion)].includes(m.text)) ? logoUploadQuestion : logoQuestion) : needsReservationChoice ? tr(reservationChoiceQuestion) : undefined };
+  const userText = messages.filter(message => message.role === "user").map(message => message.text).join("\n");
+  const restaurant = restaurantRequested(userText);
+  const needsReservationChoice = (restaurant || otherShopRequested(userText) || offeredReservationChoice) && articles !== undefined && reservationsEnabled === undefined;
+  return { name, logoKnown, reservationsEnabled, articles, introductions, question: !name ? tr(shopNameQuestion) : !logoKnown ? tr(messages.filter(m => m.role === "assistant").some(m => [logoQuestion, tr(logoQuestion), logoUploadQuestion, tr(logoUploadQuestion)].includes(m.text)) ? logoUploadQuestion : logoQuestion) : needsReservationChoice ? tr(restaurant ? reservationChoiceQuestion : otherReservationChoiceQuestion) : undefined };
 }
 export function answeredFinalDetails(messages:{role:string;text:string}[]) {
   const lastUser=messages.findLastIndex(message=>message.role==="user");
@@ -104,7 +111,7 @@ export function answeredFinalDetails(messages:{role:string;text:string}[]) {
 }
 export const adaptiveQuestionInstruction = "質問する前に、今回の回答と保存済みの会話から、分かっていること・まだ不明なことを整理してください。回答済みの内容を聞き直さず、画面案や依頼をまとめるために本当に必要な不明点だけを一つずつ質問してください。まとめて回答された内容もすべて考慮し、質問の順番や選択肢を回答に合わせて変えてください。固定の質問一覧を順番に消化しないでください。必要な情報が揃っていれば追加質問をせず提案へ進みます。不明点を勝手に確定せず、相談だけなら提案や変更のための質問を強制しないでください。";
 export const requestIntentInstruction: Record<RequestIntent, string> = {
-  get "create-shop"() { return tr("初めてのお店づくりです。業種が不明な場合だけ『どういう業種のお店ですか？』と業種を聞いてください。希望の機能が不明なら『追加したい機能を次から選んでください。』と業種に合う機能を1.、2.の番号付きで提示してください。飲食店では予約を必須にせず、機能を選ぶ場面で「予約あり（予約フォーム・AI相談）」と「予約なし（店舗情報のみ）」を別の番号付き選択肢として示し、どちらかを選べるようにしてください。すでに予約の有無が指定されていれば聞き直さず、予約なしの選択を後の画面案や公開時にも維持してください。飲食店には会員登録・ログイン・会員限定お問い合わせを案内しないでください。飲食店以外はお店の紹介・予約・お問い合わせを含めます。追加できるブログ・お知らせ・スタッフ紹介・商品やサービス紹介をそれぞれ別の選択肢にして、番号でも言葉でも複数選べるようにし、追加機能は「なし」でも進めます。希望がすでに伝えられていれば機能の選択は省きます。追加ページの希望が未確認の場合だけ『それ以外に欲しいページはありますか？』と聞いてください。『紹介と予約だけでいい』など希望の範囲が明確なら、この質問も省きます。これらは会話の例であり、固定の必須手順ではありません。業種と必要な機能・ページが分かり、不明点が解消したらchangeRequest=trueとして最後の確認へ進めます。必要な情報が揃ってもすぐ画面案へ進まず、必ず最後に『ほかに伝えたいことはありますか？』と質問し、ready=falseで返答を待ってください。その質問への返答を受け、追加内容も確認できてからready=trueにします。必要な確認が残る場合はready=falseにしてください。スタッフ・料金・営業時間は必須にせず、仮の設定を確定した事実として扱わないでください。後からスタッフや料金を決められるという説明は、聞かれない限りしないでください。"); },
+  get "create-shop"() { return tr("初めてのお店づくりです。業種が不明な場合だけ『どういう業種のお店ですか？』と業種を聞いてください。希望の機能が不明なら『追加したい機能を次から選んでください。』と業種に合う機能を1.、2.の番号付きで提示してください。飲食店と「その他」のお店（文具店など）では、機能を選ぶ場面で「予約あり」と「予約なし」を別の番号付き選択肢として示し、どちらかを選べるようにしてください。飲食店の「予約あり」には予約フォームとAI相談が含まれ、「その他」のお店ではAIはお店の案内をします。すでに予約の有無が指定されていれば聞き直さず、予約なしの選択を後の画面案や公開時にも維持してください。飲食店には会員登録・ログイン・会員限定お問い合わせを案内しないでください。飲食店以外はお店の紹介・お問い合わせを含め、ネイルサロン・美容室は予約も含めます。追加できるブログ・お知らせ・スタッフ紹介・商品やサービス紹介をそれぞれ別の選択肢にして、番号でも言葉でも複数選べるようにし、追加機能は「なし」でも進めます。希望がすでに伝えられていれば機能の選択は省きます。追加ページの希望が未確認の場合だけ『それ以外に欲しいページはありますか？』と聞いてください。『紹介と予約だけでいい』など希望の範囲が明確なら、この質問も省きます。これらは会話の例であり、固定の必須手順ではありません。業種と必要な機能・ページが分かり、不明点が解消したらchangeRequest=trueとして最後の確認へ進めます。必要な情報が揃ってもすぐ画面案へ進まず、必ず最後に『ほかに伝えたいことはありますか？』と質問し、ready=falseで返答を待ってください。その質問への返答を受け、追加内容も確認できてからready=trueにします。必要な確認が残る場合はready=falseにしてください。スタッフ・料金・営業時間は必須にせず、仮の設定を確定した事実として扱わないでください。後からスタッフや料金を決められるという説明は、聞かれない限りしないでください。"); },
   get consult() { return tr("相談のみです。質問への回答と説明を行い、設定の変更や新規ページの作成は依頼されていません。変更プランは作成しないでください。"); },
   get modify() { return tr("公開後のお店への変更依頼です。既存の設定やページの修正と、新しいページの追加のどちらも受け付けます。どうしたいかが分からなければ短く聞いてください。依頼された箇所だけを変更し、新しいページは目的・載せたい内容・お客様向けメニューに表示する名前を確認して、新規のIDとアドレスでpagesに追加してください。"); },
   get "new-page"() { return tr("新しいページの作成依頼です。目的・載せたい内容・お客様向けメニューに表示する名前を確認し、新規のIDとアドレスでpagesに追加してください。既存のページ・予約メニュー・料金・勤務・営業時間は変更しないでください。"); },
@@ -127,12 +134,13 @@ export function initialSetupDemoReply(question:string,messages:{role:string;text
   const userText=[...messages.filter(message=>message.role==="user").map(message=>message.text),answer].join("\n");
   const assistantMessages=messages.filter(message=>message.role==="assistant");
   const restaurant = restaurantRequested(userText);
-  const hasIndustry=restaurant||/ネイル|美容|教室|レッスン|サロン|整体|カフェ|飲食|nail|hair|salon|cafe|café|class|lesson|restaurant|massage/i.test(userText);
-  const selected=/紹介|予約|ブログ|お知らせ|問い合わせ|FAQ|よくある質問|introduction|about|booking|blog|announcement|inquir|contact/i.test(userText)||assistantMessages.some(message=>[initialFeatureQuestion,tr(initialFeatureQuestion),restaurantFeatureQuestion,tr(restaurantFeatureQuestion),reservationChoiceQuestion,tr(reservationChoiceQuestion)].includes(message.text))&&/[1-6１-６]|全部|すべて|all|なし|不要|none|no extra|no additional/i.test(answer);
+  const other = otherShopRequested(userText);
+  const hasIndustry=restaurant||other||/ネイル|美容|教室|レッスン|サロン|整体|カフェ|飲食|nail|hair|salon|cafe|café|class|lesson|restaurant|massage/i.test(userText);
+  const selected=facts.articles !== undefined || /紹介|予約|ブログ|お知らせ|問い合わせ|FAQ|よくある質問|introduction|about|booking|blog|announcement|inquir|contact/i.test(userText)||assistantMessages.some(message=>[initialFeatureQuestion,tr(initialFeatureQuestion),restaurantFeatureQuestion,tr(restaurantFeatureQuestion),reservationChoiceQuestion,tr(reservationChoiceQuestion)].includes(message.text))&&/[1-6１-６]|全部|すべて|all|なし|不要|none|no extra|no additional/i.test(answer);
   const askedAdditional=assistantMessages.some(message=>[additionalPagesQuestion,tr(additionalPagesQuestion)].includes(message.text));
   const additionalAnswered=/(?:他|ほか|それ以外|追加).{0,24}(?:不要|ありません|いらな|なし|ない)|だけ(?:で|を|に)|(?:no|not any|nothing) (?:other|else|additional)|only (?:about|introduction|booking)/i.test(userText);
   const complete=hasIndustry&&(askedAdditional||selected&&additionalAnswered);
   const ready=complete&&answeredFinalDetails([...messages,{role:"user",text:answer}]);
   if(ready&&/^(?:はい[、。\s]*)?(?:あります|ある|追加があります|伝えたいことがあります)[。！!\s]*$|^(?:yes[,.!\s]*)?(?:I (?:have|would like to add) (?:something|more)|there is more|yes)[.!\s]*$/i.test(answer.trim()))return {answer:tr("伝えたいことを教えてください。"),changeRequest:true,ready:false};
-  return {answer:ready?tr("ご希望の機能とページで、画面案をまとめます。"):complete?tr(finalDetailsQuestion):!hasIndustry?tr("どういう業種のお店ですか？"):selected?tr(additionalPagesQuestion):tr(restaurant ? restaurantFeatureQuestion : initialFeatureQuestion),changeRequest:true,ready};
+  return {answer:ready?tr("ご希望の機能とページで、画面案をまとめます。"):complete?tr(finalDetailsQuestion):!hasIndustry?tr("どういう業種のお店ですか？"):selected?tr(additionalPagesQuestion):tr(restaurant ? restaurantFeatureQuestion : other ? otherFeatureQuestion : initialFeatureQuestion),changeRequest:true,ready};
 }

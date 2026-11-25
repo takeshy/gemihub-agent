@@ -29,7 +29,8 @@ export async function atomicWrite(file, data, options = {}) {
 function cleanMetadata(value = {}) {
   const result = Object.fromEntries(Object.entries(value).filter(([key, item]) =>
     (["fetchedAt", "description", "reservationSummary", "error"].includes(key) && typeof item === "string") ||
-    (key === "status" && ["connected", "needs-review", "error"].includes(item))));
+    (key === "status" && ["connected", "needs-review", "error"].includes(item)) ||
+    (key === "publishedShopId" && typeof item === "string" && /^[a-f0-9-]{36}$/.test(item))));
   if (result.status !== "error") delete result.error;
   return result;
 }

@@ -47,4 +47,5 @@ start("shop", ["--env-file-if-exists=.env", "--import", "tsx", "server/index.ts"
   DEMO_MODE: "true", SEED: "restaurant-demo", PORT: shopPort,
   APP_ORIGIN: `http://127.0.0.1:${shopPort}`, AGENT_PARENT_URL: `http://localhost:${finderPort}`,
   PARENT_MAIL_URL: process.env.PARENT_MAIL_URL || `http://127.0.0.1:${adminPort}/api/internal/mail`,
+  PARENT_SHOPS_URL: process.env.PARENT_SHOPS_URL || `http://127.0.0.1:${adminPort}/api/internal/shops`,
 });

@@ -261,7 +261,8 @@ export type Booking = {
 /** Menus a customer can book on their own: shown, and not an add-on to another menu. A restaurant offers only its courses. */
 export const bookableMenus = (config: Pick<ShopConfig, "menus"> & { industry?: ShopConfig["industry"] }) => config.menus.filter(menu => menu.active && !menu.optionFor && (config.industry !== "restaurant" || menu.kind === "course"));
 /** Whether customers can reserve at all: a restaurant by seats alone or with a course, any other shop with a menu. */
-export const reservationsEnabled = (config: Pick<ShopConfig, "industry" | "reservationsEnabled">) => config.industry !== "restaurant" || config.reservationsEnabled !== false;
+export const canDisableReservations = (industry: ShopConfig["industry"]) => industry === "restaurant" || industry === "other";
+export const reservationsEnabled = (config: Pick<ShopConfig, "industry" | "reservationsEnabled">) => !canDisableReservations(config.industry) || config.reservationsEnabled !== false;
 /** A restaurant that takes reservations on its site, as opposed to one that only presents itself. */
 export const restaurantReservations = (config: Pick<ShopConfig, "industry" | "reservationsEnabled">) => config.industry === "restaurant" && config.reservationsEnabled !== false;
 export const takesBookings = (config: Pick<ShopConfig, "menus" | "industry" | "seating" | "reservationsEnabled">) =>
@@ -443,6 +444,11 @@ export function planSummary(before: ShopConfig | null, next: ShopConfig) {
   if (!before && next.industry === "restaurant") return [
     tr("お店の紹介とメニューのページ"),
     ...(next.reservationsEnabled === false ? [] : [tr("会員登録不要の予約フォームとAI相談"), tr("予約確定とキャンセルのメール通知")]),
+    tr("お店の記録と仕様・変更履歴"),
+  ];
+  if (!before && !reservationsEnabled(next)) return [
+    tr("お店の紹介とメニューのページ"),
+    tr("お客様のログインとお問い合わせ"),
     tr("お店の記録と仕様・変更履歴"),
   ];
   if (!before)

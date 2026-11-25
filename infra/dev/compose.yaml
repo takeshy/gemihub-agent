@@ -31,12 +31,13 @@ services:
       GOOGLE_CLOUD_LOCATION: global
       VERTEX_MODEL: ${VERTEX_MODEL:?VERTEX_MODEL is required}
       GEMINI_MODEL: ${VERTEX_MODEL:?VERTEX_MODEL is required}
-      GEMINI_DESIGN_MODEL: gemini-4-argon
+      GEMINI_DESIGN_MODEL: gemini-4-neon
       GEMINI_THINKING_LEVEL: low
       PUBLIC_AI_MODE: managed
       PUBLIC_AI_TRUST_PROXY: 'true'
       PUBLIC_AI_LIVE_IP_DAILY_LIMIT: '60'
       PARENT_MAIL_URL: http://127.0.0.1:8091/api/internal/mail
+      PARENT_SHOPS_URL: http://127.0.0.1:8091/api/internal/shops
     volumes:
       - /var/lib/gemihub-dev/parent:/data/parent
   challenge-demo:

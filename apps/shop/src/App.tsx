@@ -1,7 +1,7 @@
 import { ProductsInput } from "./ProductsInput";
 import { storefrontText } from "../shared/storefront-copy";
 import { setAiName, type AiName } from "./ai-name";
-import { primaryNavigationItems } from "../shared/navigation";
+import { primaryNavigationItems, storefrontScreenAvailable } from "../shared/navigation";
 import { InquiryFilePicker, useInquiryFiles } from "./InquiryFiles";
 import { serviceName } from "../shared/brand";
 import { Brand } from "./Brand";
@@ -54,7 +54,7 @@ import { createRequestId } from "./request-id";
 import { dashboardTab, useDashboardNavigation } from "./dashboard-navigation";
 import React, { useCallback, useEffect, useState, useRef, useId } from "react";
 import { useApi } from "./api";
-import { asRestaurant, bookableMenus, bookingStaff, bookingStaffName, bookingMenuName, bookingDates, menuSelection, menuAllowsOption, hoursText, specialDaysText, ownerStaffId, type ShopConfig, type Booking } from "../server/domain";
+import { asRestaurant, bookableMenus, bookingStaff, bookingStaffName, bookingMenuName, bookingDates, canDisableReservations, reservationsEnabled, menuSelection, menuAllowsOption, hoursText, specialDaysText, ownerStaffId, type ShopConfig, type Booking } from "../server/domain";
 import type { Shop, User } from "../server/store";
 import "./style.css";
 import "./ManagementTypography.css";
@@ -438,6 +438,7 @@ function Dashboard({
   useEffect(() => { if (shop && session.user?.judge) onPublishedChange?.(!!shop.published); }, [shop?.id, !!shop?.published, session.user?.judge, onPublishedChange]);
   const creating = !!shop?.isOwner && !shop.published;
   const publiclyPublished = !!shop?.published && shop.publication !== "provisional";
+  const takesReservations = storefrontScreenAvailable(shop?.published, "reserve");
   const shopRegion = shop?.published ? regionOf(shop.published) : shop?.regionDefault || regionOf(null);
   // The dashboard needs a published configuration; staff of an unpublished shop start on their own page.
   const fallbackTab = shop?.published ? "dashboard" : "staff";
@@ -492,9 +493,9 @@ function Dashboard({
     ["assistant", "✳", tr("相談・質問")],
     ["configuration", "⚙", tr("設定")],
     ...(shop?.isOwner ? [["try", "✧", tr("AIとお店をつくる")]] : []),
-    ...(publiclyPublished ? [["bookings", "▦", tr("予約を管理")], ["customers", "♧", tr("お客様")], ["analytics", "▥", tr("分析")]] : []),
-    ...(publiclyPublished && shop?.isOwner ? [["coupons", "◇", tr("クーポン")]] : []),
-    ...(publiclyPublished && shop?.isOwner ? [["payments", currencyOf(shopRegion) === "USD" ? "$" : "¥", tr("決済・返金")], ["transfers", "↻", tr("キャンセル枠の再販売")]] : []),
+    ...(publiclyPublished && takesReservations ? [["bookings", "▦", tr("予約を管理")]] : []),
+    ...(publiclyPublished ? [["customers", "♧", tr("お客様")], ["analytics", "▥", tr("分析")]] : []),
+    ...(publiclyPublished && shop?.isOwner && takesReservations ? [["coupons", "◇", tr("クーポン")], ["payments", currencyOf(shopRegion) === "USD" ? "$" : "¥", tr("決済・返金")], ["transfers", "↻", tr("キャンセル枠の再販売")]] : []),
     ["inquiries", "✉", tr("お問い合わせ")],
     ...(articleKinds(shop?.published).length ? [["blog", "✎", articleKinds(shop?.published).length === 2 ? tr("ブログ・お知らせ") : articleKinds(shop?.published)[0] === "blogs" ? tr("ブログ") : tr("お知らせ")]] : []),
     ...(!shop?.isOwner ? [["staff", "♧", tr("自分のカレンダー")]] : []),
@@ -621,7 +622,13 @@ function Dashboard({
                 )}
                 {view === "assistant" && shop.published && <ConsultationWorkspace key={`${shop.id}:${session.user?.email}`} shopId={shop.id} email={session.user!.email} active selected={selectedConversation} revision={consultationRevision} onSelect={selectConsultation}>{selectedConversation ? <Assistant key={`${shop.id}:${session.user?.email}:${selectedConversation}`} conversationId={selectedConversation} initialQuestion={assistantQuestion?.shopId === shop.id && assistantQuestion.conversationId === selectedConversation ? assistantQuestion.question : undefined} onInitialQuestionConsumed={() => setAssistantQuestion(undefined)} onConversationChange={() => setConsultationRevision(value => value + 1)} shop={shop} userEmail={session.user?.email || ""} voice={!!session.assistantVoice} acceptPlan={acceptPlan} reload={load} /> : <section className="panel"><h2>{tr("相談・質問")}</h2><p>{tr("左の「＋新規の相談」から相談を始められます。")}</p></section>}</ConsultationWorkspace>}
                 {view === "analytics" && <ShopAnalytics shopId={shop.id} />}
-                {view === "basic" && shop.isOwner && <section className="basic-settings" aria-label={tr("お店の基本情報と予約の設定")}>{(shop.published?.industry === "restaurant" ? ["basic","seating","hours","rules"] as const : ["basic","hours","rules"] as const).map(section=><LiveSettings key={`${shop.id}-${section}`} shop={shop} section={section} reload={load}/>)}</section>}
+                {view === "basic" && shop.isOwner && <section className="basic-settings" aria-label={takesReservations ? tr("お店の基本情報と予約の設定") : tr("お店の基本情報")}>{(shop.published?.industry === "restaurant" ? ["basic","seating","hours","rules"] as const : ["basic","hours","rules"] as const).filter(section => takesReservations || (section !== "rules" && section !== "seating")).map(section=><LiveSettings key={`${shop.id}-${section}`} shop={shop} section={section} reload={load}/>)}
+                  {session.user?.role === "owner" && session.user.shopId === shop.id && !session.user.judge && !session.user.legacyNotes && !session.user.accessPending && <section className="panel shop-reset-panel" aria-labelledby="shop-reset-panel-title">
+                    <h2 id="shop-reset-panel-title">{tr("お店を最初から作り直す")}</h2>
+                    <p className="small muted">{tr("今のお店を閉じて、AIと最初からお店をつくり直します。実行する前に確認の画面が出ます。")}</p>
+                    <ShopReset shopId={shop.id} navigate={href => location.assign(href)} label={tr("お店を最初から作り直す")} className="danger" />
+                  </section>}
+                </section>}
                 {view === "menus" && shop.isOwner && <LiveSettings key={`${shop.id}-menus`} shop={shop} section="menus" reload={load} />}
                 {view === "coupons" && shop.isOwner && shop.published && <Coupons key={shop.id} shopId={shop.id} config={shop.published}/>}
                 {view === "staff" && <>{shop.isOwner && <><LiveSettings key={`${shop.id}-staff`} shop={shop} section="staff" reload={load} /><StaffAccounts key={`${shop.id}-${shop.revision}`} shop={shop} onSaved={load}/></>}{!shop.isOwner && <><StaffCalendar key={shop.id} shop={shop} onSaved={load}/><StaffPhoto shop={shop} reload={load}/></>}</>}
@@ -782,7 +789,7 @@ export function ConfigEditor({
           </select>
         </Field>
       </div>
-      {restaurant && (!section || section === "basic" || section === "profile") && <label className="check-field"><input type="checkbox" checked={c.reservationsEnabled !== false} onChange={event => put("reservationsEnabled", event.target.checked)} />{tr("このサイトで予約を受け付ける")}</label>}
+      {canDisableReservations(c.industry) && (!section || section === "basic" || section === "profile") && <label className="check-field"><input type="checkbox" checked={reservationsEnabled(c)} onChange={event => put("reservationsEnabled", event.target.checked)} />{tr("このサイトで予約を受け付ける")}</label>}
       {c.industry === "restaurant" && c.reservationsEnabled !== false && section === "basic" && <p className="notice" role="status">{tr("飲食店として保存すると、予約はスタッフではなく席数で受け付けます。席の設定を用意し、材料が未入力のメニューは非表示にします。保存後に「席の設定」と「メニュー・料金」を確認してください。")}</p>}
       <Field label={tr("お店の紹介")}>
         <textarea
@@ -1500,13 +1507,18 @@ export function PublicShop({
   const inquiryPending = useRef<{ serialized: string; requestId: string } | undefined>(undefined);
   const inquirySending = useRef(false);
   const [bookingMessage, setBookingMessage] = useState("");
-  const [pane, setPane] = useState(initialPane || (session.user ? "mine" : "about"));
+  const [requestedPane, setPane] = useState(initialPane || (session.user ? "mine" : "about"));
   const [completedBooking, setCompletedBooking] = useState<Booking>();
   const [requestId, setRequestId] = useState(() => createRequestId());
   // In demo mode the server lets every visitor book as a shared demo customer, with no sign-in.
   const shopper = session.user?.role === "customer" && session.user.shopId === data?.shopId ? session.user : data?.demoCustomer;
   const isCustomer = !!shopper;
   const confirmed = completedBooking && isCustomer && completedBooking.customer === shopper?.email && completedBooking.shopId === data?.shopId ? completedBooking : undefined;
+  const acceptsBookings = storefrontScreenAvailable(data?.config, "reserve");
+  const paymentParams = new URLSearchParams(search);
+  const paymentReturn = (paymentParams.has("checkout") || paymentParams.has("transfer")) && ["return", "cancel"].includes(paymentParams.get("paypal") || "");
+  const pane = storefrontScreenAvailable(data?.config, requestedPane) || (paymentReturn && (requestedPane === "mine" || confirmed))
+    ? requestedPane : "about";
   const lastActivity = useRef("");
   const lastPageView = useRef("");
   useEffect(() => {
@@ -1562,7 +1574,7 @@ export function PublicShop({
     }
   }, [pane, confirmed, data?.shopId]);
   const loadMine = async () => {
-    if (isCustomer) {
+    if (isCustomer && (acceptsBookings || paymentReturn)) {
       const [bookings, pending, transfers, waitlist, wallet] = await Promise.all([api<Booking[]>(`${base}/bookings`), api<PendingCheckout[]>(`${base}/checkouts`), api<MyTransfers>(`${base}/transfers/mine`), api<SlotWish[]>(`${base}/waitlist`), api<CouponWalletItem[]>(`${base}/coupons`)]);
       setMine(bookings); setCheckouts(pending); setMyTransfers(transfers); setWishes(waitlist);
       setCoupons(wallet);
@@ -1610,11 +1622,11 @@ export function PublicShop({
     run(async () => { await confirmTransfer(id, action === "cancel"); });
   }, [isCustomer, data?.shopId, search]);
   useEffect(() => {
-    if (!data || pane !== "reserve" || category || pageSlug || confirmed) return;
+    if (!data || !reservationsEnabled(data.config) || pane !== "reserve" || category || pageSlug || confirmed) return;
     let cancelled = false;
     api<TransferListing[]>(`${base}/transfers`).then(result => { if (!cancelled) setListings(result); }).catch(() => { if (!cancelled) setListings([]); });
     return () => { cancelled = true; };
-  }, [base, data?.shopId, pane, category, pageSlug, confirmed, session.user?.email]);
+  }, [base, data?.shopId, data?.config.reservationsEnabled, pane, category, pageSlug, confirmed, session.user?.email]);
   useEffect(() => {
     if (!isCustomer || !data) return;
     const params = new URLSearchParams(search || "");
@@ -1643,7 +1655,7 @@ export function PublicShop({
     });
   }, [base]);
   useEffect(() => {
-    if (!data || !isCustomer || data.registrationRequired || category || pageSlug || pane !== "reserve" || confirmed) return;
+    if (!data || !reservationsEnabled(data.config) || !isCustomer || data.registrationRequired || category || pageSlug || pane !== "reserve" || confirmed) return;
     const selection = menuSelection(data.config, menu, optionIds);
     if (optionIds.length && !selection) { setOptionIds([]); return; }
     if (
@@ -1685,7 +1697,7 @@ export function PublicShop({
   }, [requestedDate, automaticDate, menu, optionIds, staff, data, category, pageSlug, pane, confirmed, isCustomer, shopper?.email, timesRetry]);
   useEffect(() => {
     run(loadMine);
-  }, [isCustomer]);
+  }, [isCustomer, acceptsBookings, paymentReturn]);
   if (!data)
     return <div className="loading">{tr("お店のページを準備しています…")}</div>;
   const c = data.config;
@@ -1780,7 +1792,7 @@ export function PublicShop({
               )}
               <TransferHistory selling={myTransfers.selling} />
               <WaitlistWishes base={base} config={c} wishes={wishes} busy={busy} run={run} reload={loadMine} />
-              <CouponWallet items={coupons} config={c} onUse={id => {
+              {acceptsBookings && <CouponWallet items={coupons} config={c} onUse={id => {
                 setCouponId(id); setPaymentConsent(false); setRequestId(createRequestId()); setCompletedBooking(undefined);
                 if (leavePaymentReturn("reserve",id)) return;
                 if (!onPaneChange) {
@@ -1790,7 +1802,7 @@ export function PublicShop({
                 focusCouponBooking.current = true;
                 setPane("reserve");
                 if (onPaneChange) onPaneChange("reserve");
-              }}/>
+              }}/>}
             </div>
   );
   const bookingSection = () => confirmed ? <BookingComplete booking={confirmed} config={c} simulation={data.paymentSimulation} onMine={() => {
@@ -2054,11 +2066,11 @@ export function PublicShop({
       </SiteHeader>}
       <ThemeBody config={c} imageBase={`${base}/images`}>
       {!hideHeader&&!isCustomer&&c.industry !== "restaurant"&&<section id="customer-signin" tabIndex={-1} className="public-auth" aria-label={tr("会員登録・ログイン")}>
-        <div className="public-auth-intro"><strong>{tr("ご予約をご利用の方へ")}</strong><p>{data.googleAuthUrl ? tr("メールアドレスまたはGoogleアカウントでご利用いただけます。") : tr("メールアドレスでご利用いただけます。")}</p></div>
+        <div className="public-auth-intro"><strong>{acceptsBookings ? tr("ご予約をご利用の方へ") : tr("会員登録・ログイン")}</strong><p>{data.googleAuthUrl ? tr("メールアドレスまたはGoogleアカウントでご利用いただけます。") : tr("メールアドレスでご利用いただけます。")}</p></div>
         <div className="public-auth-actions"><div><span>{tr("初めての方")}</span><button className="primary" onClick={() => setEmailLoginOpen(true)}>{tr("会員登録")}</button></div><div><span>{tr("登録済みの方")}</span><button onClick={() => setEmailLoginOpen(true)}>{tr("ログイン")}</button></div></div>
       </section>}
       {c.industry !== "restaurant" && <CustomerEmailLogin base={base} shopName={c.name} googleAuthUrl={data.googleAuthUrl} open={emailLoginOpen} onClose={() => setEmailLoginOpen(false)}/>}
-      {c.industry !== "restaurant" && isCustomer && data.registrationRequired ? <CustomerRegistration base={base} email={shopper!.email} name={shopper!.name} profile={data.customerProfile} onSaved={profile => { setData(current => current && { ...current, customerProfile: profile, registrationRequired: false }); setName(profile.name); setPane("reserve"); }} /> : pageSlug ? (
+      {c.industry !== "restaurant" && isCustomer && data.registrationRequired ? <CustomerRegistration base={base} email={shopper!.email} name={shopper!.name} profile={data.customerProfile} onSaved={profile => { setData(current => current && { ...current, customerProfile: profile, registrationRequired: false }); setName(profile.name); if (pane !== "contact") setPane(acceptsBookings ? "reserve" : "contact"); }} /> : pageSlug ? (
         c.pages.find(page => page.slug === pageSlug) ? <CustomPage page={c.pages.find(page => page.slug === pageSlug)!} imageBase={`${base}/images`} /> : <p className="alert">{tr("ページがありません。")}</p>
       ) : category && articleKinds(c).includes(category) ? (
         <PublicBlog
@@ -2072,7 +2084,7 @@ export function PublicShop({
       ) : (
         <>
           {pane === "mine" && screen("mine", { news: mineNews(), mypage: <>{mineMember()}{minePanel()}</> }, <>{mineNews()}{mineMember()}{minePanel()}</>)}
-          {pane === "reserve" && (isCustomer ? (() => { const booking = bookingSection(); return screen("reserve", { booking }, booking); })() : loginRequired())}
+          {pane === "reserve" && (acceptsBookings || confirmed) && (isCustomer ? (() => { const booking = bookingSection(); return screen("reserve", { booking }, booking); })() : loginRequired())}
           {pane === "about" && <ShopAbout config={c} imageBase={`${base}/images`} menuImageBase={`${base}/menu-images`} />}
           {pane === "contact" && (() => { const form = contactForm(); return screen("contact", { form }, form); })()}
         </>

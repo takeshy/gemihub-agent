@@ -14,6 +14,19 @@ import { syncStatus } from "../src/editor-sync.ts";
 import { postKey, type PublicPost } from "../server/post-domain.ts";
 
 process.env.DEMO_MODE = "true";
+test("the design tree omits booking and My page while reservations are turned off", () => {
+  const config: ShopConfig = { ...sample, industry: "other", reservationsEnabled: false };
+  const tree = (config: ShopConfig) => renderToStaticMarkup(createElement(ScreenTree, {
+    draft: { config, source: config, base: 0, fixtures: sampleFixtures(config) },
+    statuses: {}, selected: "about", disabled: false, onChoose() {},
+  }));
+  const disabled = tree(config);
+  assert.match(disabled, /お店のこと/);
+  assert.match(disabled, /お問い合わせ/);
+  assert.doesNotMatch(disabled, /マイページ|>予約</);
+  assert.match(tree({ ...config, reservationsEnabled: true }), /マイページ/);
+});
+
 test("preview trees and sample APIs show only enabled article features, including cached fixtures", async () => {
   const original = structuredClone(sample), fixtures = sampleFixtures(original);
   for (const blogs of [false, true]) for (const announcements of [false, true]) {

@@ -4,7 +4,7 @@ import { Models } from "@google/genai";
 import { initialInterviewReply, type InitialInterviewContext } from "../server/initial-interview.ts";
 import { explainSystem } from "../server/ai.ts";
 import { sample } from "../server/domain.ts";
-import { initialInterviewFacts, requestIntentInstruction, restaurantFeatureQuestion, reservationChoiceQuestion, initialSetupDemoReply } from "../server/request-intent.ts";
+import { initialInterviewFacts, requestIntentInstruction, restaurantFeatureQuestion, reservationChoiceQuestion, otherFeatureQuestion, otherReservationChoiceQuestion, initialSetupDemoReply } from "../server/request-intent.ts";
 import type { generateJson } from "../server/llm.ts";
 
 type ModelInput = Parameters<typeof generateJson>[0];
@@ -109,6 +109,17 @@ test("the real initial interview entry point uses the chat model without sending
 });
 
 const restaurantStart = [{ role: "user", text: "店名は灯。飲食店です。ロゴはなし。" }];
+
+test("other shops can choose no reservations alongside optional features", () => {
+  const intro = "店名は灯文具。文具店です。ロゴはなし。";
+  assert.equal(initialSetupDemoReply(intro, []).answer, otherFeatureQuestion);
+  const asked = [{ role: "user", text: intro }, { role: "assistant", text: otherFeatureQuestion }];
+  const choice = initialInterviewFacts([...asked, { role: "user", text: "2と4" }]);
+  assert.equal(choice.reservationsEnabled, false);
+  assert.deepEqual(choice.articles, { blogs: false, announcements: true });
+  assert.equal(initialSetupDemoReply("4", asked).answer, otherReservationChoiceQuestion);
+  assert.equal(initialInterviewFacts([{ role: "user", text: intro + "予約は不要です。" }]).reservationsEnabled, false);
+});
 
 test("restaurant feature selection offers reservations with or without booking", () => {
   assert.equal(initialSetupDemoReply("店名は灯。飲食店です。ロゴはなし。", []).answer, restaurantFeatureQuestion);

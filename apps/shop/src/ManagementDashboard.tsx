@@ -1,7 +1,7 @@
 import React, { useEffect, useState } from "react";
 import { getLocale, tr } from "../shared/i18n";
 import { managementSummary } from "../shared/management-dashboard";
-import { bookingMenuName, bookingStaffName } from "../server/domain";
+import { bookingMenuName, bookingStaffName, reservationsEnabled } from "../server/domain";
 import { useShopDisplay } from "./money";
 import { Pagination, usePagination } from "./Pagination";
 import { PayPalAttention } from "./PayPalAttention";
@@ -37,7 +37,7 @@ export function ManagementDashboard({ shop, busy, refresh, open, reload, onAsk }
   return <div className="management-dashboard">
     <div className="section-top"><div><h1>{tr("ダッシュボード")}</h1><p className="small muted">{summary.today} · {timeZoneLabel}</p></div><button type="button" disabled={busy} onClick={refresh}>{tr("更新")}</button></div>
     <div className="dashboard-summary-grid">
-      <section className="panel dashboard-today" aria-label={tr("本日の予約")}>
+      {(reservationsEnabled(config) || summary.bookings.length > 0) && <section className="panel dashboard-today" aria-label={tr("本日の予約")}>
         <div className="section-top"><h2>{tr("本日の予約")} <span className="count">{publiclyPublished ? summary.bookings.length : 0}</span></h2>{publiclyPublished && <a data-dashboard-link className="text-button" href={href("bookings")} onClick={event => follow(event, "bookings")}>{tr("予約一覧へ →")}</a>}</div>
         {!publiclyPublished ? <p className="muted">{tr("本番公開すると、当日の予約をここで確認できます。")}</p> : <>
           {!summary.bookings.length && <p className="muted">{tr("本日の予約はありません。")}</p>}
@@ -49,7 +49,7 @@ export function ManagementDashboard({ shop, busy, refresh, open, reload, onAsk }
             </button>
           </article>)}</div><Pagination pagination={bookings} label={tr("本日の予約")} />
         </>}
-      </section>
+      </section>}
       <section className="panel dashboard-inquiries" aria-label={tr("未対応のお問い合わせ")}>
         <div className="section-top"><h2>{tr("未対応のお問い合わせ")} <span className="count">{summary.inquiries.length}</span></h2><a data-dashboard-link className="text-button" href={href("inquiries")} onClick={event => follow(event, "inquiries")}>{tr("お問い合わせ一覧へ →")}</a></div>
         {!summary.inquiries.length && <p className="muted">{tr("未対応のお問い合わせはありません。")}</p>}

@@ -4,6 +4,7 @@ import type { AddressInfo } from "node:net";
 import { createApp } from "../server/app.ts";
 import { allowDemoShoppers } from "../server/auth.ts";
 import { Store } from "../server/store.ts";
+import { storefrontRenderer } from "../server/storefront-build.tsx";
 import { request as httpRequest } from "node:http";
 import { shopSchema, bookingMenuName, asRestaurant, takesBookings, canPublishShop, sample, type Booking, type ShopConfig } from "../server/domain.ts";
 import { updateLiveValue } from "../server/live-settings.ts";
@@ -424,7 +425,7 @@ test("reservation pages share the published theme and upgrade releases missing t
   assert.equal((page.match(/id="assistant-toggle"/g) || []).length, 1);
   assert.doesNotMatch(page, /class="panel about"|agent\/reserve\.css/);
   assert.equal(page.match(/href="([^"]*\/_assets\/[^"]*\.css)"/)?.[1], home.match(/href="([^"]*\/_assets\/[^"]*\.css)"/)?.[1]);
-  assert.equal((await store.shop(shop.id))!.storefrontRelease!.renderer, 10);
+  assert.equal((await store.shop(shop.id))!.storefrontRelease!.renderer, storefrontRenderer);
 });
 
 test("a salon keeps its staff-based booking and has no agent bundle", async t => {

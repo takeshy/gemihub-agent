@@ -14,7 +14,7 @@ dev.gemihub.net {
 }
 admin.dev.gemihub.net {
     import dev-noindex
-    @internal path /api/internal/mail
+    @internal path /api/internal/*
     respond @internal 404
     reverse_proxy app:8091
 }

@@ -2,6 +2,7 @@ import { bookingStaff, type ShopConfig } from "../server/domain.ts";
 import { policyText } from "../server/payment-domain.ts";
 import { articleKinds } from "./article-features.ts";
 import { tr } from "./i18n.ts";
+import { storefrontScreenAvailable } from "./navigation.ts";
 
 /** Settings-derived content shared by the operating screen and exported diagram. */
 export function shopInfographic(config: ShopConfig) {
@@ -14,9 +15,9 @@ export function shopInfographic(config: ShopConfig) {
     { label: tr("予約確定"), detail: tr("お客様と店主にメール通知") },
   ];
   const pages = [
-    { title: tr("予約"), count: 1 },
+    ...(storefrontScreenAvailable(config, "reserve") ? [{ title: tr("予約"), count: 1 }] : []),
     { title: tr("お店のこと"), count: 1 },
-    { title: tr("マイページ"), count: 1 },
+    ...(storefrontScreenAvailable(config, "mine") ? [{ title: tr("マイページ"), count: 1 }] : []),
     { title: tr("お問い合わせ"), count: 1 },
     ...articleKinds(config).map(kind => ({ title: kind === "blogs" ? tr("ブログ一覧・記事") : tr("お知らせ一覧・記事"), count: 2 })),
     ...config.pages.map(page => ({ title: page.title, count: 1 })),

@@ -2892,7 +2892,18 @@ body.visual-chat-open { --visual-chat-width: 380px; padding-right: var(--visual-
 .shop-change-chat .request-intents-reset { flex-shrink: 0; }
 .shop-change-chat .chat-composer { margin-top: 8px; }
 .shop-change-chat .chat-composer textarea { width: 100%; }
-@media (max-width: 760px) { body.shop-change-chat-open { --visual-chat-height: min(80dvh, max(420px, 60dvh)); } }
+@media (max-width: 760px) {
+  body.shop-change-chat-open { --visual-chat-height: min(80dvh, max(420px, 60dvh)); }
+  .shop-change-chat.shop-chat-keyboard-open {
+    bottom: var(--shop-chat-keyboard-inset);
+    height: var(--shop-chat-visible-height);
+  }
+  .shop-chat-keyboard-open .request-intents-reset,
+  .shop-chat-keyboard-open .shop-request > p:not(.alert):not(.notice) { display: none; }
+  .shop-chat-keyboard-open .shop-request .chat-log { min-height: 80px; margin: 0; overscroll-behavior: contain; }
+  .shop-change-chat.shop-chat-keyboard-open .chat-composer { margin: 0; max-height: min(135px, 42%); }
+  .shop-chat-keyboard-open .chat-composer > textarea { height: 46px; min-height: 46px; max-height: 68px; padding: 10px 12px; }
+}
 @media (max-width: 900px) { .dashboard-summary-grid { grid-template-columns: minmax(0, 1fr); } }
 @media (max-width: 600px) { .management-dashboard { gap: 16px; } .shop-change-review .request-review { padding: 16px; } }
 

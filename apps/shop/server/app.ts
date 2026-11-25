@@ -1,5 +1,6 @@
 import { googleCallbackPath } from "../shared/brand.ts";
 import { headerCopyKeys } from "../shared/storefront-copy.ts";
+import { customerStartPane, storefrontScreenAvailable } from "../shared/navigation.ts";
 import { forEachConcurrent } from "./concurrency.ts";
 import { shopExport, exportRows, exportCsv, exportColumns, type ExportTable } from "./data-export.ts";
 import { proposeSettings, settingsChanges, type SettingsProposal } from "./settings-ai.ts";
@@ -61,6 +62,7 @@ import { resolve, extname, sep } from "node:path";
 import { z } from "zod";
 import { Store, bookingLockKey, mailLockKey, postLockKey, isArchivedShop, type Shop, type User } from "./store.ts";
 import { resetShop } from "./shop-reset.ts";
+import { parentListingEnabled, parentListingPending, syncParentListing } from "./parent-registry.ts";
 import { preserveDesignVersion, retireDesignVersions, pruneDesignVersions, nextDesignPublication, currentDesignPublication, restoreDesign, sameDesign, parseTargetKey, targetKey, versionsFor, targetLabel, indexedDesignVersions, hasCurrentDesignIndex, sameAsCurrent } from "./design-versions.ts";
 import { createInitialTheme, initialThemeConfig, initialIntroductionPages, initialThemePreview, type ThemeRun } from "./initial-theme.ts";
 import { publicAi, memoryAiState } from "./public-ai.ts";
@@ -94,6 +96,7 @@ import {
   canPublishShop,
   bookingContactEmail,
   restaurantReservations,
+  reservationsEnabled,
   type ShopConfig,
   type Booking,
 } from "./domain.ts";
@@ -547,13 +550,22 @@ export function createApp(
     // Only a changed configuration needs to commit between booking operations.
     // Refreshing files for the same configuration remains independent.
     const current = await store.shop(shop.id);
+    const firstPublicRelease = shop.publication === "public" && !!shop.published &&
+      (!current?.published || current.publication === "provisional");
+    if (firstPublicRelease && !shop.judge && parentListingEnabled()) shop.parentListing = "pending";
     if (JSON.stringify(current?.published) === JSON.stringify(shop.published)) await store.saveShop(shop);
     else await store.locked(bookingLockKey(shop.id), () => store.saveShop(shop));
+    if (firstPublicRelease && shop.parentListing === "pending") scheduleParentListing(shop.id);
     // Only releases older than the retained ones are removed; a failed cleanup is retried on the next release.
     if (dropped.length) {
       const kept = [shop.storefrontRelease!, ...shop.storefrontPrevious || []];
       await forEachConcurrent(storefrontGarbage(shop.id, kept, dropped), 4, async path => { await pageFiles.remove(path).catch(error => console.warn(`Storefront ${shop.id}: could not delete ${path}`, error)); });
     }
+  }
+  function scheduleParentListing(shopId: string) {
+    store.afterCommit(() => {
+      logs.run(shopId, () => { void syncParentListing(store, shopId).catch(reportError); }, "sync_parent_listing");
+    });
   }
   // Shops without a release from the current generator are rebuilt by the background loop; failures back off.
   const storefrontRetry = new Map<string, { at: number; delay: number }>();
@@ -844,7 +856,7 @@ export function createApp(
     const listed = await transfers.active(c.shopId, c.booking.id);
     if (listed) return { ...listed.unsold, transfer: { id: listed.id, price: listed.price, deadline: listed.deadline } };
     const quote = refundQuote(p.amount, c.booking.start, at, p.policy, "customer");
-    const { terms } = bookingTransferable(config, c.booking) ? await transfers.quote(c, at) : {};
+    const { terms } = reservationsEnabled(config) && bookingTransferable(config, c.booking) ? await transfers.quote(c, at) : {};
     return { ...quote, ...(terms ? { transfer: { price: terms.price, deadline: terms.deadline } } : {}) };
   }
   const transferCheckoutView = (t: Transfer) => ({ id: t.id, phase: t.buyer?.phase || "expired", expires: t.buyer?.expires || 0, approvalUrl: t.buyer?.phase === "awaiting_approval" ? t.buyer.approvalUrl : undefined, review: !!t.buyer?.review, amount: t.price, currency: t.currency });
@@ -1517,7 +1529,8 @@ export function createApp(
         }
         await login(store, res, ticket.user);
         await customerLoginLog(ticket.user);
-        return redirect(res, `${publicHost ? "/" : `/s/${ticket.slug}`}?pane=mine`);
+        const shop = ticket.user.shopId ? await store.shop(ticket.user.shopId) : undefined;
+        return redirect(res, `${publicHost ? "/" : `/s/${ticket.slug}`}?pane=${customerStartPane(shop?.published)}`);
       }
       const staffLogin = path.match(/^\/api\/staff-login\/([^/]+)$/);
       if (staffLogin && method === "GET" && !publicHost) {
@@ -1738,12 +1751,8 @@ export function createApp(
         if (!pending.shopId && u.legacyNotes) {
           return redirect(res, "/settings/migration");
         }
-        return redirect(
-          res,
-          pending.shopId
-            ? `/s/${(await store.shop(pending.shopId))!.slug}?pane=mine`
-            : "/",
-        );
+        const customerShop = pending.shopId ? await store.shop(pending.shopId) : undefined;
+        return redirect(res, customerShop ? `/s/${customerShop.slug}?pane=${customerStartPane(customerShop.published)}` : "/");
       }
       const secureCookie = origin().startsWith("https:") ? "; Secure" : "";
       const restoreJudgeOwner = async () => {
@@ -1954,7 +1963,9 @@ export function createApp(
       if (path === "/api/shop-reset" && method === "POST" && !publicHost) {
         if (user?.role !== "owner" || user.judge || user.accessPending) fail(403, tr("店主のみ利用できます"));
         const input = z.object({ shopId: z.uuid() }).parse(await body(req));
-        return json(res, await resetShop(store, user.email, input.shopId));
+        const result = await resetShop(store, user.email, input.shopId);
+        scheduleParentListing(input.shopId);
+        return json(res, result);
       }
       if (path === "/api/workspace" && method === "GET" && !publicHost) {
         if (!user) fail(401, tr("ログインしてください"));
@@ -3735,7 +3746,7 @@ export function createApp(
           await rememberJudgeOwner(shop.id);
           await login(store, res, customer);
           await customerLoginLog(customer);
-          return json(res, { ok: true, redirectTo: `${storefrontPath}?pane=mine&lang=${getLocale()}` });
+          return json(res, { ok: true, redirectTo: `${storefrontPath}?pane=${customerStartPane(shop.published)}&lang=${getLocale()}` });
         }
         const imageRead = action.match(/^(menu-images|images)\/([a-f0-9]{64})$/);
         if (imageRead && method === "GET") {
@@ -3880,6 +3891,12 @@ export function createApp(
           }
           const existingPayment = action === "checkouts" || action.startsWith("checkouts/") || (action === "bookings" && method === "GET") || action === "transfers" || action === "transfers/mine" || /^transfers\/[a-f0-9]{64}\/(capture|abandon|resume|withdraw)$/.test(action) || /^waitlist(?:\/|$)/.test(action);
           const config = existingPayment ? shop.published! : await effective(shop);
+          if (!reservationsEnabled(config) && config.industry === "other") {
+            if (action === "transfers" && method === "GET") return [];
+            if (["slots", "slots/next", "seats"].includes(action)
+              || (["bookings", "waitlist"].includes(action) && method === "POST")
+              || /^transfers\/[a-f0-9]{64}\/checkout$/.test(action)) fail(409, tr("このお店はオンライン予約を受け付けていません。"));
+          }
           const ownProfile = async () => memberProfile(await store.get("customer", `${shop.id}:${customer().email}`));
           if (action === "coupons" && method === "GET") {
             return await couponWallet(store, shop, customer().email);
@@ -3913,7 +3930,7 @@ export function createApp(
               preview: false,
               publication: shop.publication || "public",
               recentPosts: livePosts.slice(0, 5).map(summarizePost),
-              ...(config.industry !== "restaurant" ? { authUrl: `${languageUrl(`${publicHost ? `https://${host}` : origin()}${publicHost ? "/" : `/s/${shop.slug}`}?pane=mine`)}#email-login`,
+              ...(config.industry !== "restaurant" ? { authUrl: `${languageUrl(`${publicHost ? `https://${host}` : origin()}${publicHost ? "/" : `/s/${shop.slug}`}?pane=${customerStartPane(config)}`)}#email-login`,
               googleAuthUrl: process.env.GOOGLE_CLIENT_ID ? languageUrl(`${origin()}/auth/google?shop=${encodeURIComponent(shop.slug)}${hosted ? `&host=${encodeURIComponent(host)}` : ""}`) : undefined } : {}),
             });
           }
@@ -4032,7 +4049,7 @@ export function createApp(
             const u = customer();
             const c = await store.get<Checkout>("checkout", transferAction[1]);
             if (!c || c.shopId !== shop.id || c.customer !== u.email) fail(404, tr("予約がありません"));
-            if (!bookingTransferable(config, c.booking)) fail(409, tr("このメニューはキャンセル後の予約受付に対応していません"));
+            if (!reservationsEnabled(config) || !bookingTransferable(config, c.booking)) fail(409, tr("このメニューはキャンセル後の予約受付に対応していません"));
             if (transferAction[2] === "transfer-quote") {
               const { terms, reason } = await transfers.quote(c);
               return (terms ? { eligible: true, ...terms } : { eligible: false, reason });
@@ -4425,6 +4442,11 @@ export function createApp(
             res.removeHeader("X-Frame-Options");
             res.setHeader("Content-Security-Policy", String(res.getHeader("Content-Security-Policy")).replace(/frame-ancestors [^;]+/, `frame-ancestors ${agentParent.origin}`));
           }
+          const pane = url.searchParams.get("pane") || "";
+          const paymentReturn = (url.searchParams.has("checkout") || url.searchParams.has("transfer")) && ["return", "cancel"].includes(url.searchParams.get("paypal") || "");
+          if (!category && !storefrontScreenAvailable(shop.published, pane) && !paymentReturn) {
+            return redirect(res, languageUrl(publicHost ? "/" : `/s/${encodeURIComponent(shop.slug)}/`));
+          }
           if (!category && shop.published.industry === "restaurant" && url.searchParams.get("pane") === "reserve" && !url.searchParams.has("checkout")) {
             // Existing published navigation still points at the former booking pane.
             return redirect(res, languageUrl(`${publicHost ? "" : `/s/${encodeURIComponent(shop.slug)}`}/reserve`));
@@ -4565,6 +4587,7 @@ export function createApp(
       if (stopped) return;
       const shops = await store.list<Shop>("shop");
       if (stopped) return;
+      if (parentListingEnabled()) for (const shop of shops.filter(parentListingPending)) scheduleParentListing(shop.id);
       for (const shop of shops.filter(
         (s) => s.published && !isArchivedShop(s),
       )) {

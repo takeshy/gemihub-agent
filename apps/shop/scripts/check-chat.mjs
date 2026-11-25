@@ -47,6 +47,26 @@ try{
     const sendBounds=await submit.boundingBox();
     assert.ok(sendBounds.y+sendBounds.height<=chatBounds.y+chatBounds.height,"send button fits inside the chat panel");
     assert.ok((await log.boundingBox()).height>=100,"conversation remains readable alongside the topic hint");
+    if (width === 390) {
+      await page.evaluate(() => {
+        Object.defineProperties(window.visualViewport, {
+          height: { configurable: true, value: 380 },
+          offsetTop: { configurable: true, value: 22 },
+        });
+        window.visualViewport.dispatchEvent(new Event("resize"));
+      });
+      assert.equal(await restart.isVisible(), false, "the introduction makes room for answers while typing");
+      const keyboardLog = await log.boundingBox();
+      const keyboardSend = await submit.boundingBox();
+      assert.ok(keyboardLog.y >= 21 && keyboardLog.height >= 170, `the conversation remains readable with the keyboard open: ${JSON.stringify(keyboardLog)}`);
+      assert.ok(keyboardSend.y + keyboardSend.height <= 403, "send remains above the software keyboard");
+      await page.evaluate(() => {
+        delete window.visualViewport.height;
+        delete window.visualViewport.offsetTop;
+        window.visualViewport.dispatchEvent(new Event("resize"));
+      });
+      assert.equal(await restart.isVisible(), true, "the new-conversation button returns when the keyboard closes");
+    }
     await restart.click();await page.waitForFunction(()=>document.querySelectorAll('.chat-message-user').length===0);
     await composer.fill("予約方法と持ち物を載せるFAQページを追加したいです。メニューは「よくある質問」にしてください。");await page.getByRole("button",{name:"送信",exact:true}).click();
     await page.getByRole("button",{name:"変更案を確認する",exact:true}).waitFor();

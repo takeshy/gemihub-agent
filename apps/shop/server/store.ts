@@ -13,6 +13,7 @@ export type Shop = {
   slug: string;
   published: ShopConfig | null;
   publication?: "provisional" | "public";
+  parentListing?: "pending" | "listed" | "removed";
   /** Completed immutable HTML release in the private storefront bucket. */
   storefrontRelease?: import("./storefront-build.tsx").StorefrontRelease;
   /** Releases kept after the current one (newest first); older ones are deleted. */

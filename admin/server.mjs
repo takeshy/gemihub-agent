@@ -2,7 +2,7 @@ import { createServer } from "node:http";
 import { readFile } from "node:fs/promises";
 import { fileURLToPath } from "node:url";
 import { resolve } from "node:path";
-import { resolveShop } from "../scripts/resolve-shop.mjs";
+import { inferArea, normalizeShopUrl, resolveShop, shopBase } from "../scripts/resolve-shop.mjs";
 import { createShopStore } from "./store.mjs";
 import { suggestCuisine } from "../scripts/suggest-cuisine.mjs";
 import { createGoogleAuth, trustedIntegration } from "./google-auth.mjs";
@@ -36,6 +36,40 @@ export function createAdminServer({ root = process.env.PARENT_ROOT || fileURLToP
   const importDocument = createDocumentImporter({ apiKey: geminiApiKey, fetch: fetchImpl });
   const publicPage = new URL(process.env.AGENT_PARENT_URL || "http://localhost:8090");
   if (publicPage.username || publicPage.password || (publicPage.protocol !== "https:" && !(publicPage.protocol === "http:" && ["localhost", "127.0.0.1", "[::1]"].includes(publicPage.hostname)))) throw new Error("お店さがしの公開URLを確認してください");
+  const industries = { restaurant: "飲食店", other: "お店", nail: "ネイルサロン", hair: "美容室" };
+  async function syncPublishedShop(input, remove) {
+    if (!input || typeof input.shopId !== "string" || !/^[a-f0-9-]{36}$/.test(input.shopId)
+      || typeof input.slug !== "string" || !/^[a-z0-9][a-z0-9-]{0,79}$/.test(input.slug)) {
+      throw new Error("店舗の識別情報が不正です");
+    }
+    // The integration can only list local storefronts. The origin is deployment configuration,
+    // never a URL supplied by the caller.
+    const page = new URL(`/s/${input.slug}`, normalizeShopUrl(shopOrigin, { production })).href;
+    const current = await store.get();
+    const existing = current.shops.find(shop => shopBase(shop.pageUrl) === page);
+    if (remove) {
+      if (existing && current.cache[existing.id]?.publishedShopId === input.shopId) {
+        await store.delete(existing.id, current.revision);
+      }
+      return { ok: true };
+    }
+    if (!Object.hasOwn(industries, input.industry) || typeof input.name !== "string" || !input.name.trim() || input.name.length > 100
+      || typeof input.address !== "string" || input.address.length > 500 || typeof input.description !== "string" || input.description.length > 2000
+      || typeof input.reservations !== "boolean" || !["", "reservation_concierge", "shop_guide"].includes(input.network)) {
+      throw new Error("公開店舗の情報が不正です");
+    }
+    // The operator might already have entered this storefront and edited its wording or links.
+    if (existing || current.shops.some(shop => current.cache[shop.id]?.publishedShopId === input.shopId)) return { ok: true, added: false };
+    const id = current.shops.some(shop => shop.id === input.slug) ? `shop-${input.shopId}` : input.slug;
+    const entry = {
+      id, name: input.name, area: inferArea(input.address) || "未設定", cuisine: industries[input.industry],
+      pageUrl: page, address: input.address, description: input.description, reservationEnabled: input.reservations,
+      ...(input.network ? { networkUrl: `${page}/agent/${input.network}` } : {}),
+      ...(input.reservations ? { reservationUrl: input.industry === "restaurant" ? `${page}/reserve` : `${page}?pane=reserve` } : {}),
+    };
+    await store.save([...current.shops, entry], { [id]: { publishedShopId: input.shopId, status: "connected" } }, current.revision);
+    return { ok: true, added: true };
+  }
   return createServer(async (req, res) => {
     const send = (status, data) => {
       req.resume();
@@ -53,6 +87,10 @@ export function createAdminServer({ root = process.env.PARENT_ROOT || fileURLToP
         const message = await body(req, 15 * 1024 * 1024);
         await auth.mail(message, message.senderEmail);
         return send(200, { ok: true });
+      }
+      if (["POST", "DELETE"].includes(req.method) && req.url === "/api/internal/shops") {
+        if (!trustedIntegration(req, integrationSecret)) return send(403, { error: "店舗アプリからの依頼か確認できません" });
+        return send(200, await syncPublishedShop(await body(req, 20000), req.method === "DELETE"));
       }
       const port = req.socket.localPort;
       const hosts = [`127.0.0.1:${port}`, `localhost:${port}`, ...(port === 80 ? ["127.0.0.1", "localhost"] : [])];

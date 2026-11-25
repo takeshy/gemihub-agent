@@ -1,7 +1,7 @@
 import { createHash } from "node:crypto";
 import { z } from "zod";
 import { origin } from "./auth.ts";
-import { bookingHeldSince, bookingStaffName, menuSelection, type Booking, type ShopConfig } from "./domain.ts";
+import { bookingHeldSince, bookingStaffName, menuSelection, reservationsEnabled, type Booking, type ShopConfig } from "./domain.ts";
 import { requestLocale } from "./i18n.ts";
 import { judgeActive } from "./judge.ts";
 import { isArchivedShop, type Shop, type Store } from "./store.ts";
@@ -51,7 +51,7 @@ export function wishError(config: ShopConfig, wish: Pick<SlotWish, "date" | "men
   return undefined;
 }
 
-const watched = (shop: Shop) => !!shop.published && !isArchivedShop(shop) && (!!shop.google || !!shop.judge) && (!shop.judge || judgeActive());
+const watched = (shop: Shop) => !!shop.published && reservationsEnabled(shop.published) && !isArchivedShop(shop) && (!!shop.google || !!shop.judge) && (!shop.judge || judgeActive());
 const wishKey = (wish: SlotWish) => JSON.stringify([wish.date, wish.menuId, [...wish.optionIds].sort(), wish.staffId]);
 
 const fittingListings = (wish: SlotWish, range: ReturnType<typeof bounds>, listings: WaitlistListing[]) =>

@@ -25,6 +25,7 @@ import { shopSchema, planSummary, bookingStaff, menuSelection, type ShopConfig }
 import { postKey, type PostCategory, type PublicPost } from "../server/post-domain";
 import { createRequestId } from "./request-id";
 import { articleKinds } from "../shared/article-features";
+import { storefrontScreenAvailable } from "../shared/navigation";
 import { standardTheme, themeHtmlKey } from "../shared/theme-editing";
 import { createPreviewClient, draftKey, fixturesSchema, readDraft, sampleFixtures, syncPreviewArticleFeatures, writeDraft, type LocalDraft, type Fixtures } from "./local-preview";
 
@@ -52,7 +53,8 @@ export function LocalPreview({ shop, email, reload, sidebar, active = true, chan
     document.addEventListener("keydown", closeOnEscape);
     return () => { document.removeEventListener("pointerdown", closeOutside, true); document.removeEventListener("keydown", closeOnEscape); };
   }, []);
-  const [screen, setScreen] = useState(initialScreen || "reserve");
+  const defaultScreen = storefrontScreenAvailable(shop.published, "reserve") ? "reserve" : "about";
+  const [screen, setScreen] = useState(initialScreen && storefrontScreenAvailable(shop.published, initialScreen) ? initialScreen : defaultScreen);
   const [penHost, setPenHost] = useState<HTMLSpanElement | null>(null);
   const [historyHost, setHistoryHost] = useState<HTMLSpanElement | null>(null);
   const [visibility, setVisibility] = useState<Record<string, { header?: boolean; footer?: boolean }>>({});
@@ -60,7 +62,7 @@ export function LocalPreview({ shop, email, reload, sidebar, active = true, chan
   const [statuses, setStatuses] = useState<Record<string, SyncStatus>>({});
   const [conflict, setConflict] = useState<{ scope: ReleaseScope; localValue: unknown; remoteValue: unknown; remoteConfig?: ShopConfig; baseline: unknown; proposed?: unknown; explanation?: string }>();
   const [pageEditing, setPageEditing] = useState<ShopPage>();
-  const [route, setRoute] = useState<{ category?: PostCategory; articleKey?: string; pageSlug?: string; pane: string }>({ pane: "reserve" });
+  const [route, setRoute] = useState<{ category?: PostCategory; articleKey?: string; pageSlug?: string; pane: string }>({ pane: defaultScreen });
   const [version, setVersion] = useState(0);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState("");
@@ -255,6 +257,7 @@ export function LocalPreview({ shop, email, reload, sidebar, active = true, chan
   }
   async function choose(value: string, articleKey?: string, fromLocation = false) {
     if (value.startsWith("part:")) value = "theme";
+    if (!storefrontScreenAvailable(latestDraft.current?.config || shop.published, value)) value = "about";
     const [category, article] = value.split(":");
     if ((category === "blogs" || category === "announcements") && !articleKinds(latestDraft.current?.config).includes(category)) return;
     const firstArticle = latestDraft.current?.fixtures.posts.find(post => post.category === category);
@@ -307,17 +310,19 @@ export function LocalPreview({ shop, email, reload, sidebar, active = true, chan
     if(!initialScreen||!draft||!index||draft.pending)return;
     const category=initialScreen.split(":")[0];
     if((category==="blogs"||category==="announcements")&&!articleKinds(draft.config).includes(category)){
-      onScreenChange?.("reserve");
-      void run(async()=>choose("reserve",undefined,true));
+      onScreenChange?.(defaultScreen);
+      void run(async()=>choose(defaultScreen,undefined,true));
       return;
     }
-    const selection=JSON.stringify([initialScreen,initialArticleKey]);
+    const next = storefrontScreenAvailable(draft.config, initialScreen) ? initialScreen : "about";
+    const selection=JSON.stringify([next,initialArticleKey]);
     if(entrySelected.current===selection)return;
     entrySelected.current=selection;
     const screens=["part:header","part:footer","theme","reserve","about","mine","contact",...articleKinds(draft.config).flatMap(category=>[category,`${category}:article`]),...index.pages.map(page=>`page:${page.id}`),...draft.config.pages.map(page=>`page:${page.id}`)];
     if(!screens.includes(initialScreen)){setError(tr("指定された画面が見つかりません。画面一覧から選んでください。"));return;}
-    void run(async()=>choose(initialScreen,initialArticleKey,true));
-  },[draft,index,initialScreen,initialArticleKey]);
+    if (next !== initialScreen) onScreenChange?.(next);
+    void run(async()=>choose(next,initialArticleKey,true));
+  },[draft,index,initialScreen,initialArticleKey,defaultScreen]);
   async function remoteValue(target: ReleaseScope) {
     if (target.kind === "page") return (await api<{ page: ShopPage | null }>(`/api/shops/${shop.id}/local-editor/pages/${target.pageId}`)).page;
     return scopedSource((await api<Snapshot>(`/api/shops/${shop.id}/local-editor/shared`)).source, target);
@@ -336,7 +341,7 @@ export function LocalPreview({ shop, email, reload, sidebar, active = true, chan
     writeDraft(localStorage, key, next); restore(next); setConflict(undefined);
     if (target.kind === "page") {
       setPageEditing(config.pages.find(p => p.id === target.pageId));
-      if (chosen === null && remote === null) { setScreen("reserve"); setRoute({ pane: "reserve" }); } else setScreen(`page:${target.pageId}`);
+      if (chosen === null && remote === null) { setScreen(defaultScreen); setRoute({ pane: defaultScreen }); } else setScreen(`page:${target.pageId}`);
     }
   }
   async function fetchScope(target: ReleaseScope, discardConfirmed = false) {
@@ -401,7 +406,7 @@ export function LocalPreview({ shop, email, reload, sidebar, active = true, chan
     const current = await api<Snapshot>(`/api/shops/${shop.id}/local-editor`);
     const remote = await refreshIndex();
     restore(afterRelease(current, next, next.pending!.scope || scope, remote));
-    if (scope.kind === "page" && !current.config.pages.some(p => p.id === scope.pageId)) { setScreen("reserve"); setRoute({ pane: "reserve" }); }
+    if (scope.kind === "page" && !current.config.pages.some(p => p.id === scope.pageId)) { setScreen(defaultScreen); setRoute({ pane: defaultScreen }); }
     setNotice(tr("本番に反映しました。"));
     await reload();
   }
@@ -505,7 +510,7 @@ export function LocalPreview({ shop, email, reload, sidebar, active = true, chan
             const pageMatch = url.pathname.match(/^\/s\/local-preview\/pages\/([^/]+)$/);
             if (pageMatch) { const page = draft.config.pages.find(p => p.slug === pageMatch[1]); if (page) void run(async () => choose(`page:${page.id}`)); return; }
             if (match) void run(async () => choose(`${match[1]}${match[2] ? ":article" : ""}`, match[2]));
-            else void run(async () => choose(url.searchParams.get("pane") || "reserve"));
+            else void run(async () => choose(url.searchParams.get("pane") || defaultScreen));
           }} />
         </ApiProvider>)}
       </div>}
@@ -520,7 +525,7 @@ export function LocalPreview({ shop, email, reload, sidebar, active = true, chan
           {status === "unfetched" ? <p className="notice">{tr("ページを自動で読み込んでいます。")}</p> : selectedPage ? <fieldset disabled={busy || !!draft.pending || !!conflict}><PageEditor key={selectedPage.id} page={pageEditing?.id === selectedPage.id ? pageEditing : selectedPage} shopId={shop.id} onChange={editPage} onDelete={() => {
             if (!window.confirm(tr("このページをローカルで削除しますか？本番からの削除は反映時に行います。"))) return;
             save({ ...draft, config: { ...draft.config, pages: draft.config.pages.filter(p => p.id !== selectedPage.id) } }); setPageEditing(undefined); setInvalid("");
-            if (!draft.source?.pages.some(p => p.id === selectedPage.id)) { setScreen("reserve"); setRoute({ pane: "reserve" }); }
+            if (!draft.source?.pages.some(p => p.id === selectedPage.id)) { setScreen(defaultScreen); setRoute({ pane: defaultScreen }); }
           }} /></fieldset> : <p className="notice">{tr("このページは削除予定です。「本番に反映」で公開ページから削除します。")}<button disabled={busy || !!draft.pending || !!conflict} onClick={() => {
             const page = draft.source?.pages.find(p => scope.kind === "page" && p.id === scope.pageId);
             if (page) { save({ ...draft, config: { ...draft.config, pages: [...draft.config.pages, page] } }); setPageEditing(page); }

@@ -1,6 +1,7 @@
 import { randomBytes } from "node:crypto";
 import { z } from "zod";
 import { getLocale, tr } from "../shared/i18n.ts";
+import { customerStartPane } from "../shared/navigation.ts";
 import { digest } from "./auth.ts";
 import { memberProfile } from "./customer-profile.ts";
 import type { Shop, Store, User } from "./store.ts";
@@ -42,7 +43,7 @@ export function emailLogin(store: Store, send: LoginMailer) {
       await store.put("emailLogin", key, { shopId: shop.id, email, origin: requestOrigin, expires: Date.now() + lifetime } satisfies Challenge);
       // Fragments stay out of HTTP requests, access logs, and referrer headers.
       const link = new URL(storefrontPath, requestOrigin);
-      link.searchParams.set("pane", "mine");
+      link.searchParams.set("pane", customerStartPane(shop.published));
       link.searchParams.set("lang", getLocale());
       link.hash = new URLSearchParams({ "email-login": token }).toString();
       try {

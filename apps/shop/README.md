@@ -32,6 +32,7 @@ A booking and shop management system for small independent businesses and salons
 - **Request photos and blog posts in plain words:** Ask AI to generate custom images for services and pages, or draft blog posts and announcements.
 
 ### 2. Bookings, Payments, and Staff Sync
+- **Publish without bookings:** Restaurants and Other shops, such as stationery stores, can choose “No reservations” during setup or turn off online reservations in Shop information. They can go live without adding a bookable menu. The screen proposal, design editor, and storefront navigation omit Booking and My Page.
 - **Smart availability calculation:** Automatically computes open slots from business hours, holidays, staff shifts, and service durations (with or without staff preference).
 - **Google Calendar integration:** Owner sign-in requests Calendar FreeBusy access alongside Drive and Gmail. No staff registration is required for the owner; their Calendar busy times are checked automatically. A shop can start with no additional staff. Other staff grant Calendar access through their staff login.
 - **Add-on services:** Configure removal or care as an optional addition to selected services. Prices and durations are combined for availability, booking and payment; options in the same group are mutually exclusive.

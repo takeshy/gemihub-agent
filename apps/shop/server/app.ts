@@ -62,6 +62,7 @@ import { resolve, extname, sep } from "node:path";
 import { z } from "zod";
 import { Store, bookingLockKey, mailLockKey, postLockKey, isArchivedShop, type Shop, type User } from "./store.ts";
 import { resetShop } from "./shop-reset.ts";
+import { blocksPublication } from "../shared/theme-proposal.ts";
 import { parentListingEnabled, parentListingPending, syncParentListing } from "./parent-registry.ts";
 import { preserveDesignVersion, retireDesignVersions, pruneDesignVersions, nextDesignPublication, currentDesignPublication, restoreDesign, sameDesign, parseTargetKey, targetKey, versionsFor, targetLabel, indexedDesignVersions, hasCurrentDesignIndex, sameAsCurrent } from "./design-versions.ts";
 import { createInitialTheme, initialThemeConfig, initialIntroductionPages, initialThemePreview, type ThemeRun } from "./initial-theme.ts";
@@ -111,7 +112,7 @@ import {
   sendMail,
 } from "./google.ts";
 import { fromMinor, toMinor, regionOf, currencyOf, dateIn, formatMinor, formatMoney, zonedDate } from "../shared/region.ts";
-import { themeImageIds } from "../shared/presentation.ts";
+import { themeImageIds, type Theme } from "../shared/presentation.ts";
 import { judgeActive, judgeInvite, judgeUntil, judgeAiLimit, judgeEmailDomain, judgeCallerNumber, judgePhoneSettings, judgePhonePin, isJudgeEmail, isJudgeCustomerEmail, isAdmin, accessPasswordEnabled, accessPasswordMatches, secretMatches, demoGoogleUnavailable, type DemoGoogle, type JudgeMail, type JudgeUsage } from "./judge.ts";
 import { converse, draftText, type ShopData } from "./assistant.ts";
 import { paypalOps, relevantProposals } from "./paypal-ops.ts";
@@ -202,6 +203,8 @@ type Plan = {
   requiresSetup?: boolean;
   themeRunId?: string;
   themeReview?: { attempts: number; approved: boolean; rendered?: boolean };
+  /** The shop's own AI design is being made separately and will be offered once ready. */
+  themeProposal?: true;
   chat?: ChatReference;
   local?: boolean;
   settingsSection?: LiveSection;
@@ -212,6 +215,21 @@ type Plan = {
   /** The owner's request text, recorded in history.md when the plan is published. */
   request?: string;
 };
+/** The shop's own AI design, generated after the shop opens with the built-in design. */
+type ThemeProposal = {
+  shopId: string;
+  status: "generating" | "ready" | "failed" | "dismissed" | "applied";
+  themeRunId: string;
+  request: string;
+  imageIds: string[];
+  config: ShopConfig;
+  theme?: Theme;
+  startedAt: number;
+  updatedAt: number;
+  error?: string;
+};
+/** A job that has not reported for this long was lost (for example, to a restart) and can be retried. */
+const themeProposalStaleMs = 30 * 60 * 1000;
 type Job = {
   id: string;
   shopId: string;
@@ -530,6 +548,63 @@ export function createApp(
     });
     return images;
   }
+  const themeJobs = new Map<string, number>();
+  // A job recorded before this server started cannot still be running here.
+  const serverStartedAt = Date.now();
+  // Runs the shop's first AI design outside any request; progress is saved so a retry can resume it.
+  async function runThemeProposal(proposal: ThemeProposal) {
+    if (themeJobs.get(proposal.shopId) === proposal.startedAt) return;
+    themeJobs.set(proposal.shopId, proposal.startedAt);
+    const finish = (update: Partial<ThemeProposal>, run?: ThemeRun) => store.locked(proposal.shopId, async () => {
+      const latest = await store.get<ThemeProposal>("themeProposal", proposal.shopId);
+      const shop = await store.shop(proposal.shopId);
+      // A newer job or a reset supersedes this one's checkpoints and final result.
+      if (!latest || latest.startedAt !== proposal.startedAt || latest.status !== "generating" || !shop || isArchivedShop(shop)) return;
+      await store.transaction(async () => {
+        if (run) await store.put("initialThemeRun", proposal.themeRunId, run);
+        await store.put("themeProposal", proposal.shopId, { ...latest, ...update, updatedAt: Date.now() });
+      });
+    });
+    try {
+      const shop = await store.shop(proposal.shopId);
+      if (!shop || isArchivedShop(shop)) return;
+      const run = await withAiDeadline(visualGenerationTimeoutMs, async () => {
+        const images = await readRequestImages(store, shop, proposal.imageIds, crmFiles, "");
+        return (intelligence.initialTheme || createInitialTheme)({ config: proposal.config, request: proposal.request, images }, {
+          state: await store.get<ThemeRun>("initialThemeRun", proposal.themeRunId),
+          save: state => finish({}, state),
+          checkContrast: candidate => (intelligence.themeContrast || checkInitialThemeContrast)(candidate, images),
+        });
+      });
+      if (!run.candidate) throw new Error(tr("デザインを作成できませんでした"));
+      await finish({ status: "ready", theme: run.candidate });
+    } catch (error) {
+      const message = error instanceof Error ? error.message.slice(0, 600) : tr("デザインを作成できませんでした");
+      console.error(JSON.stringify({ event: "theme_proposal_failed", shopId: proposal.shopId, error: message }));
+      await finish({ status: "failed", error: message }).catch(reportError);
+    } finally {
+      if (themeJobs.get(proposal.shopId) === proposal.startedAt) themeJobs.delete(proposal.shopId);
+    }
+  }
+  async function startThemeProposal(input: Omit<ThemeProposal, "status" | "startedAt" | "updatedAt">) {
+    const previous = await store.get<ThemeProposal>("themeProposal", input.shopId);
+    const now = Date.now();
+    const proposal: ThemeProposal = { ...input, status: "generating", startedAt: Math.max(now, (previous?.startedAt ?? 0) + 1), updatedAt: now };
+    // Start only after the plan and its linked proposal are saved.
+    await store.put("themeProposal", proposal.shopId, proposal);
+    store.afterCommit(() => { void runThemeProposal(proposal).catch(reportError); });
+    return proposal;
+  }
+  function themeProposalView(proposal: ThemeProposal | undefined) {
+    if (!proposal || proposal.status === "dismissed" || proposal.status === "applied") return { status: "none" as const };
+    const lost = proposal.status === "generating" && themeJobs.get(proposal.shopId) !== proposal.startedAt && (proposal.updatedAt < serverStartedAt || Date.now() - proposal.updatedAt > themeProposalStaleMs);
+    return { status: lost ? "failed" as const : proposal.status, startedAt: proposal.startedAt, ...(proposal.status === "ready" ? { theme: proposal.theme } : {}), ...(lost ? { error: tr("デザインの作成が中断されました。もう一度作成できます。") } : proposal.error ? { error: proposal.error } : {}) };
+  }
+  async function assertPublicDesignDecided(shop: Shop) {
+    if (shop.published && shop.publication !== "provisional") return;
+    const proposal = await store.get<ThemeProposal>("themeProposal", shop.id);
+    if (blocksPublication(themeProposalView(proposal).status)) fail(409, tr("お店専用のデザインを決めてから本番公開してください。"));
+  }
   async function savePublicShop(shop: Shop) {
     let dropped: StorefrontRelease[] = [];
     if (shop.published) {
@@ -592,7 +667,7 @@ export function createApp(
     if (!chat) return plan;
     const reply = chat.messages.find(message => message.role === "assistant" && message.requestId === plan.chat!.requestId);
     if (!reply) return plan;
-    const facts = initialInterviewFacts(chat.messages.filter(message => message.sequence <= reply.sequence));
+    const facts = initialInterviewFacts(chat.messages.filter(message => message.sequence <= reply.sequence), { industry: shop.draft?.industry });
     let config = plan.config;
     if (facts.reservationsEnabled !== undefined) config = { ...config, reservationsEnabled: facts.reservationsEnabled };
     if (facts.articles) config = { ...config, appearance: { accent: "sage", layout: "standard", imageUrl: "", ...config.appearance, articles: facts.articles } };
@@ -943,6 +1018,7 @@ export function createApp(
     if (fresh.lastPublishedPlanId === plan.id) return { ok: true, url: `/s/${fresh.slug}` };
     if (plan.base !== fresh.revision) fail(409, tr("本番の内容が変わりました。最新の内容を読み直してください"));
     if (!plan.approved) fail(409, tr("先にプランを承認してください"));
+    if (publication === "public") await assertPublicDesignDecided(fresh);
     if (publication === "public" && !canPublishShop(plan.config)) fail(400, fresh.publication === "public" ? tr("公開中のお店には、予約できるメニューが1件以上必要です。") : tr("本番公開する前に、予約できるメニューを1件以上登録してください。"));
     if (
       fresh.published && fresh.storage &&
@@ -3141,7 +3217,7 @@ export function createApp(
             const images = await loadImages(fresh.published ? imageIds : input.imageIds);
             const excluded = new Set(savedChat?.messages.slice(-25).map(message=>message.id) || []);
             const relatedHistory = fresh.published ? await searchConversationHistory(store,fresh,user!.email,input.question,excluded) : [];
-            const interview = !fresh.published ? initialInterviewFacts(savedChat?.messages || [...input.messages, { role: "user", text: input.question, detail: { imageIds: input.imageIds } }]) : undefined;
+            const interview = !fresh.published ? initialInterviewFacts(savedChat?.messages || [...input.messages, { role: "user", text: input.question, detail: { imageIds: input.imageIds } }], { industry: fresh.draft?.industry }) : undefined;
             const response = interview?.question ? { answer: interview.question, changeRequest: true, ready: false } : await intelligence.explainSystem(input.intent ? `${requestIntentInstruction[input.intent]}\n${input.question}` : input.question, config, demoEnabled() && !process.env.GOOGLE_CLOUD_PROJECT, { messages: savedChat ? conversationContext({...savedChat,messages:savedChat.messages.filter(message => message.requestId !== input.chat!.requestId)}) : input.messages, history: fresh.history, initialSetup:!fresh.published, relatedHistory, searchHistory:query=>searchConversationHistory(store,fresh,user!.email,query,excluded), ...(!fresh.published ? {facts: interview, region: fresh.regionDefault || regionOf(config), availableImageIds: imageIds, loadImages} : {}), ...(images.length ? { images } : {}) });
             if (fresh.published && !same(config, await effective(fresh))) fail(409, tr("回答中にお店の仕様が変わりました。現在の仕様を更新して質問し直してください"));
             let answer: {answer:string;changeRequest:boolean;ready?:boolean} = input.intent === "consult" ? { ...response, changeRequest: false, ready: false } : response;
@@ -3426,7 +3502,7 @@ export function createApp(
             const relatedHistory = input.intent ? await searchConversationHistory(store,fresh,user!.email,input.text,new Set(savedChat?.messages.slice(-24).map(message=>message.id) || [])) : [];
             const historicalContext = relatedHistory.length ? tr("参照用の過去の会話です。今回の変更依頼でも、反映済みという意味でもありません。現在の設定を優先してください。\n{0}\n今回の会話と依頼:\n", JSON.stringify(relatedHistory)) : "";
             // Read once: the interview's answers steer the theme and are laid over the proposal below.
-            const interviewFacts = savedChat ? initialInterviewFacts(savedChat.messages) : undefined;
+            const interviewFacts = savedChat ? initialInterviewFacts(savedChat.messages, { industry: fresh.draft?.industry }) : undefined;
             const themeRunId = !current && !input.config ? digest(`${fresh.id}:initial-theme:${chatPlanId || input.text}:${planImageIds.join(",")}`) : undefined;
             const themeState = themeRunId ? await store.get<ThemeRun>("initialThemeRun", themeRunId) : undefined;
             let generation: ChatGeneration | undefined = input.chat ? { shopId: fresh.id, email: user!.email, chat: input.chat, base: fresh.revision, stage: "preparing", attempts: 0, startedAt: Date.now(), updatedAt: Date.now() } : undefined;
@@ -3436,6 +3512,7 @@ export function createApp(
               await store.put("shopChatGeneration", generation.chat.id, generation);
             };
             await saveGeneration({});
+            let proposalText = input.text;
             try {
               const proposed = input.config
                 ? {
@@ -3443,7 +3520,7 @@ export function createApp(
                     summary: planSummary(current, releaseConfig!),
                   }
                 : await intelligence.propose(
-                    visual
+                    proposalText = visual
                       ? tr("ペンで選んだ対象 {0} のみ変更する。予約ルール・料金・所要時間など他の箇所は一切変えない。依頼：{1}", input.visual!.target, input.text)
                       : input.intent ? `${requestIntentInstruction[input.intent]}\n${historicalContext}${savedChat ? conversationContext(savedChat).map(message => `${message.role === "user" ? tr("店主") : "AI"}: ${message.text}`).join("\n") : input.text}` : input.text,
                     visual?.config || current,
@@ -3452,7 +3529,7 @@ export function createApp(
                     images,
                     // A new shop takes the region from the owner's first visit; later ones keep their own.
                     (visual?.config || current) ? (visual?.config || current)!.region : fresh.regionDefault,
-                    themeRunId ? { state: themeState, ...(interviewFacts ? { shopName: interviewFacts.name, reservationsEnabled: interviewFacts.reservationsEnabled, articles: interviewFacts.articles, introductions: interviewFacts.introductions } : {}), save: async state => {
+                    themeRunId ? { deferTheme: true, state: themeState, ...(interviewFacts ? { shopName: interviewFacts.name, reservationsEnabled: interviewFacts.reservationsEnabled, articles: interviewFacts.articles, introductions: interviewFacts.introductions } : {}), save: async state => {
                       await store.put("initialThemeRun", themeRunId, state);
                       await saveGeneration({ stage: state.candidate ? "reviewing" : state.feedback.length ? "repairing" : "generating", attempts: state.attempts, preview: initialThemePreview(state) });
                     }, checkContrast: candidate => (intelligence.themeContrast || checkInitialThemeContrast)(candidate, images) } : undefined,
@@ -3482,6 +3559,8 @@ export function createApp(
               }
               // A live shop must stay bookable; refuse here so no unusable plan is left behind.
               if (fresh.publication === "public" && !canPublishShop(proposed.config)) fail(400, tr("公開中のお店には、予約できるメニューが1件以上必要です。"));
+              // A first proposal without a theme opens with the built-in design; the shop's own design is made meanwhile.
+              const deferredTheme = !!themeRunId && !proposed.config.appearance?.theme && !(demoEnabled() && !process.env.GOOGLE_CLOUD_PROJECT);
               const plan: Plan = {
                 id: localPlanId || chatPlanId || randomUUID(),
                 local: !!input.local,
@@ -3490,6 +3569,7 @@ export function createApp(
                 base: fresh.revision,
                 ...proposed,
                 ...(themeRunId ? { themeRunId } : {}),
+                ...(deferredTheme ? { themeProposal: true as const } : {}),
                 approved: false,
                 requiresSetup: !current && !input.config,
                 createdAt: Date.now(),
@@ -3500,9 +3580,12 @@ export function createApp(
               };
               if (!plan.summary.length) fail(400, tr("変更点がありません"));
               artifacts(plan.config, '<title></title><div id="root"></div>');
-              await store.put("plan", plan.id, plan);
-              if (input.chat) await attachChatPlan(store,fresh,user!.email,input.chat,plan.id);
-              await saveGeneration({ stage: "complete", planId: plan.id, preview: undefined });
+              await store.transaction(async () => {
+                await store.put("plan", plan.id, plan);
+                if (input.chat) await attachChatPlan(store,fresh,user!.email,input.chat,plan.id);
+                await saveGeneration({ stage: "complete", planId: plan.id, preview: undefined });
+                if (deferredTheme) await startThemeProposal({ shopId: fresh.id, themeRunId: themeRunId!, request: proposalText.slice(0, 10000), imageIds: planImageIds, config: plan.config });
+              });
               return json(res, plan);
             } catch (error) {
               await saveGeneration({ stage: "failed" }).catch(() => {});
@@ -3542,6 +3625,31 @@ export function createApp(
             const posts = publicPosts(await postsFor(fresh));
             return json(res, { config, posts, publication: fresh.publication || "public", revision: fresh.revision, hash: contentHash({ config, posts }) });
           }
+          if (action === "theme-proposal" && method === "GET") {
+            assertOwner(user, fresh);
+            return json(res, themeProposalView(await store.get<ThemeProposal>("themeProposal", fresh.id)));
+          }
+          if (/^theme-proposal\/(?:retry|dismiss|applied)$/.test(action) && method === "POST") {
+            assertOwner(user, fresh);
+            const proposal = await store.get<ThemeProposal>("themeProposal", fresh.id) || fail(404, tr("デザインの提案がありません"));
+            const verb = action.split("/")[1];
+            if (verb === "retry") {
+              if (themeProposalView(proposal).status !== "failed") fail(409, tr("デザインは作成中か、作成済みです"));
+              const { status: _status, startedAt: _started, updatedAt: _updated, error: _error, theme: _theme, ...input } = proposal;
+              return json(res, themeProposalView(await startThemeProposal(input)));
+            }
+            const status = verb === "dismiss" ? "dismissed" : "applied";
+            if (proposal.status === status) return json(res, { status: "none" });
+            if (status === "applied") {
+              const currentTheme = fresh.published && (await effective(fresh)).appearance?.theme;
+              if (proposal.status !== "ready" || !proposal.theme || !currentTheme || contentHash(currentTheme) !== contentHash(proposal.theme))
+                fail(409, tr("先にデザインを反映してください。"));
+            } else if (!["ready", "failed"].includes(themeProposalView(proposal).status)) {
+              fail(409, tr("デザインは作成中か、作成済みです"));
+            }
+            await store.put("themeProposal", fresh.id, { ...proposal, status, updatedAt: Date.now() });
+            return json(res, { status: "none" });
+          }
           if (action === "publication" && method === "POST") {
             assertOwner(user, fresh);
             const input = z.object({ publication: z.literal("public"), revision: z.number().int().nonnegative(), hash: z.string().regex(/^[a-f0-9]{64}$/) }).parse(await body(req));
@@ -3552,6 +3660,7 @@ export function createApp(
             if (input.hash !== contentHash({ config, posts })) fail(409, tr("プレビュー後に内容が変わりました。最新の内容を読み直して確認してください"));
             if (!canPublishShop(config)) fail(400, tr("本番公開する前に、予約できるメニューを1件以上登録してください。"));
             if (fresh.publication !== "public") {
+              await assertPublicDesignDecided(fresh);
               fresh.publication = "public";
               fresh.history.push({ at: new Date().toISOString(), summary: tr("本番公開に切り替えました") });
               await savePublicShop(fresh);

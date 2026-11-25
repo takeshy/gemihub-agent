@@ -41,7 +41,7 @@ function featureDenied(text: string, kind: InitialFeature) {
     || /\b(?:no(?: need(?: for)?)?|without|except|(?:do not|don't) (?:want|need)|remove|omit|disable|exclude)\s+(?:a\s+)?$/i.test(text.slice(0, start));
 }
 const asksFinalDetails = (text: string) => /(?:ほか|他)に伝えたいことは?ありますか/.test(text.replace(/\s/g, "")) || /anything else (?:you[’']?d like to add|to add|you would like to (?:add|share))\s*\?/i.test(text);
-export function initialInterviewFacts(messages: { role: string; text: string; detail?: { imageIds?: string[] } }[]) {
+export function initialInterviewFacts(messages: { role: string; text: string; detail?: { imageIds?: string[] } }[], { industry }: { industry?: string } = {}) {
   let name: string | undefined; let logoKnown = false; let awaiting: "name" | "logo" | "features" | undefined;
   let reservationsEnabled: boolean | undefined;
   let offeredReservationChoice = false;
@@ -99,8 +99,8 @@ export function initialInterviewFacts(messages: { role: string; text: string; de
     awaiting = undefined;
   }
   const userText = messages.filter(message => message.role === "user").map(message => message.text).join("\n");
-  const restaurant = restaurantRequested(userText);
-  const needsReservationChoice = (restaurant || otherShopRequested(userText) || offeredReservationChoice) && articles !== undefined && reservationsEnabled === undefined;
+  const restaurant = restaurantRequested(userText) || industry === "restaurant";
+  const needsReservationChoice = (restaurant || industry === "other" || otherShopRequested(userText) || offeredReservationChoice) && articles !== undefined && reservationsEnabled === undefined;
   return { name, logoKnown, reservationsEnabled, articles, introductions, question: !name ? tr(shopNameQuestion) : !logoKnown ? tr(messages.filter(m => m.role === "assistant").some(m => [logoQuestion, tr(logoQuestion), logoUploadQuestion, tr(logoUploadQuestion)].includes(m.text)) ? logoUploadQuestion : logoQuestion) : needsReservationChoice ? tr(restaurant ? reservationChoiceQuestion : otherReservationChoiceQuestion) : undefined };
 }
 export function answeredFinalDetails(messages:{role:string;text:string}[]) {

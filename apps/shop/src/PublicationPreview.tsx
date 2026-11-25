@@ -1,5 +1,5 @@
 import { tr } from "../shared/i18n";
-import React, { useEffect, useMemo, useRef, useState } from "react";
+import React, { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { canPublishShop, type ShopConfig } from "../server/domain";
 import type { PublicPost } from "../server/post-domain";
 import { useApi } from "./api";
@@ -7,6 +7,7 @@ import { PreviewSurface, type PreviewLocation, type PreviewScreen } from "./Scre
 import { sampleFixtures } from "./local-preview";
 import { DesignVersionHistory } from "./DesignVersionHistory";
 import { regionOf } from "../shared/region";
+import { blocksPublication, type ThemeProposalStatus } from "../shared/theme-proposal";
 
 type Snapshot = { publication: "provisional" | "public"; config: ShopConfig; posts: PublicPost[]; revision: number; hash: string };
 const homeScreen: PreviewScreen = { id: "about", get name() { return tr("お店のこと"); }, get description() { return tr("お店の紹介"); }, pane: "about" };
@@ -20,10 +21,12 @@ export function PublicationPreview({ shopId }: { shopId: string }) {
   const [currentScreen,setCurrentScreen]=useState<PreviewLocation>(homeScreen);
   const [requestOpen,setRequestOpen]=useState(false);
   const bookable = !!snapshot && canPublishShop(snapshot.config);
+  const [designStatus, setDesignStatus] = useState<ThemeProposalStatus>();
+  const designWaiting = blocksPublication(designStatus);
   const requestDialog=useRef<HTMLDialogElement>(null);
   useEffect(()=>{if(requestOpen)requestDialog.current?.showModal();},[requestOpen]);
   const screenLink=`/?${new URLSearchParams({shop:shopId,tab:"try",screen:currentScreen.id,...(currentScreen.articleKey?{article:currentScreen.articleKey}:{})})}`;
-  async function load() {
+  const load = useCallback(async () => {
     setBusy(true); setError(""); setSnapshot(undefined);
     try {
       const next = await api<Snapshot>(`/api/shops/${shopId}/publication-preview`);
@@ -31,8 +34,29 @@ export function PublicationPreview({ shopId }: { shopId: string }) {
     }
     catch (e) { setError(e instanceof Error ? e.message : String(e)); }
     finally { setBusy(false); }
-  }
-  useEffect(() => { void load(); }, [shopId]);
+  }, [api, shopId]);
+  useEffect(() => { void load(); }, [load]);
+  useEffect(() => {
+    if (published) return;
+    let active = true;
+    let timer: ReturnType<typeof setTimeout> | undefined;
+    let wasWaiting = false;
+    const poll = async () => {
+      try {
+        const { status } = await api<{ status: ThemeProposalStatus }>(`/api/shops/${shopId}/theme-proposal`);
+        if (!active) return;
+        const waiting = blocksPublication(status);
+        // The owner may have applied a design in another tab. Refresh the preview before enabling publish.
+        if (wasWaiting && !waiting) void load();
+        setDesignStatus(status);
+        wasWaiting = waiting;
+        if (!waiting) return;
+      } catch { /* Retry status reads during a brief connection failure. */ }
+      if (active) timer = setTimeout(() => void poll(), 15000);
+    };
+    void poll();
+    return () => { active = false; clearTimeout(timer); };
+  }, [api, shopId, published, load]);
   const fixtures = useMemo(() => {
     if (!snapshot) return undefined;
     return { ...sampleFixtures(snapshot.config), bookings: [], posts: snapshot.posts };
@@ -49,10 +73,11 @@ export function PublicationPreview({ shopId }: { shopId: string }) {
     {snapshot && fixtures && <PreviewSurface key={snapshot.hash} config={snapshot.config} shopId={shopId} screen={homeScreen} fixtures={fixtures} onScreenChange={setCurrentScreen} />}
     {!published && <section className="publication-actions" aria-label={tr("本番公開の操作")}>
       {error && <div className="alert" role="alert"><p>{error}</p><button disabled={busy} onClick={() => void load()}>{tr("変更後の内容を確認し直す")}</button></div>}
+      {designWaiting && <p className="notice" role="status">{designStatus === "generating" ? tr("お店専用のデザインをAIが作成中です。できあがって、使うかどうかを決めてから本番公開できます。") : tr("お店専用のデザインができています。管理画面のお知らせで使うかどうかを決めてから本番公開してください。")}</p>}
       {snapshot && !bookable && <p className="notice" role="status">{tr("本番公開する前に、予約できるメニューを1件以上登録してください。")}</p>}
       <div className="publication-actions-row"><div><h2>{tr("画面の確認ができたら")}</h2><p>{tr("本番公開すると、どなたでもお店のページを見られます。")}</p></div><div className="actions">
         <button type="button" disabled={busy||!snapshot} onClick={()=>setRequestOpen(true)}>{tr("修正依頼する")}</button>
-        <button className="primary" disabled={busy || !snapshot || !bookable} onClick={async () => {
+        <button className="primary" disabled={busy || !snapshot || !bookable || !designStatus || designWaiting} onClick={async () => {
           if (!snapshot) return;
           setBusy(true); setError("");
           try { await api(`/api/shops/${shopId}/publication`, { publication: "public", revision: snapshot.revision, hash: snapshot.hash }); setPublished(true); setJustPublished(true); }

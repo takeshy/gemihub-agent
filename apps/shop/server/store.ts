@@ -313,7 +313,7 @@ export class Store {
    * action persist on their own instead of joining an already committed batch or a released lease.
    */
   afterCommit(action: () => void) {
-    const detached = () => this.batch.exit(() => this.commitActions.exit(() => this.leases.exit(action)));
+    const detached = () => this.detached(action);
     const commit = this.commitActions.getStore();
     if (!commit || commit.status === "committed") detached();
     else if (commit.status === "pending") commit.actions.push(detached);
@@ -389,6 +389,14 @@ export class Store {
       await this.saveShop(shop);
       return shop;
     });
+  }
+  /**
+   * Runs work that outlives the current request (a background job) outside the request's locks,
+   * pending batch and commit hooks. Otherwise its later reads and writes would fail once the
+   * request releases its locks.
+   */
+  detached<T>(fn: () => T): T {
+    return this.leases.exit(() => this.batch.exit(() => this.commitActions.exit(fn)));
   }
   async locked<T>(id: string, fn: () => Promise<T>): Promise<T> {
     const parents = this.activeLocks();

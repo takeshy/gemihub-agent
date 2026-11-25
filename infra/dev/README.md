@@ -60,18 +60,28 @@ https://shop.dev.gemihub.net/auth/google/callback
 
 店舗が本番公開されると、店舗アプリは `PARENT_SHOPS_URL` の内部経路から街案内に自動登録する。同じ店舗ページが登録済みなら、運営者が編集した掲載内容を保持する。連携先が一時的に利用できない場合はバックグラウンドで再試行する。店主が「お店の基本情報」から初期化すると、以前の店舗の自動登録分は街案内から取り下げる。
 
-## 検証と更新
+## 別の端末から更新
+
+Git、tar、Python 3.8以上、Google Cloud CLI、Terraform 1.7以上が使える端末でリポジトリを取得します。作業アカウントには、Cloud Buildの実行と既存ビルド用サービスアカウントの利用、Terraform stateの読み書き、対象VMのメタデータ更新、IAP経由でのOS Loginとsudoの権限が必要です。初めて使う端末ではGoogle Cloud CLIとTerraformをそれぞれ認証します。
+
+```sh
+gcloud auth login
+gcloud auth application-default login
+python3 infra/dev/deploy.py
+```
+
+既定ではローカルの `HEAD` を配備します。対象を固定するには `python3 infra/dev/deploy.py <コミットSHA>` と指定できます。コミット済みのファイルからCloud Buildでビルドし、イメージのダイジェストをTerraformに渡します。Terraformのstate接続設定はリポジトリから、現在のモデルはVMメタデータから取得します。元の端末の `.env`、`terraform.tfvars`、Terraform作業ディレクトリをコピーする必要はありません。アプリの秘密はVMが既存のSecret Managerから読み込みます。
+
+スクリプトは既存Agent VMの配備用メタデータだけが変わるTerraform planを適用し、IAP経由でAgentを更新します。Caddyの他サービス向け追記を保持した状態で設定を検証し、親・運営管理・店舗・デモのHTTPS応答と対象イメージの稼働を確認します。VMの新規作成や共有リソースの更新には「初回の配備」の手順を使います。
+
+Agentの配備後にHTTPSで親・運営管理・店舗・デモが応答することを確認し、VM上の専用 `gemihub-dev/app` リポジトリの旧イメージを整理する。現在版・直前の正常版・コンテナが参照するイメージを残す。同じ版を再適用しても直前の正常版は保持する。
+
+稼働状態を追加で調べる場合は、次のコマンドでサービスとコンテナを確認できます。
 
 ```sh
 gcloud compute ssh gemihub-dev --project=geminihub-486523 --zone=asia-northeast1-b --tunnel-through-iap \
   --command='sudo systemctl status gemihub-dev --no-pager; sudo docker stats --no-stream; free -m'
 ```
-
-3つのURLのHTTPS、未認証の管理API拒否、Googleログイン、招待メール、店主の再ログイン、保存とZIP出力を確認する。モデルやメールを使う実機検証はテスト用応答とは区別する。ランタイム設定や `docker inspect` の環境変数を出力しない。
-
-更新は新しいタグでCloud Buildを完了してから `app_image` を更新し、Terraform plan/apply後にVMの `sudo google_metadata_script_runner startup` を実行する。ランナーはCaddy設定を検証し、新しいイメージを取得して親の登録店を保持したまま配信ファイルを作り直す。デモの起動確認後にCaddyを自動リロードするので、手動で足した経路に依存しない。戻すときは直前の対応イメージタグを指定する。デモを含まない古いイメージではデモサービスを起動できない。初期配備や更新時の構成全体の自動ロールバックは行わない。
-
-Agentの配備後にHTTPSで親・運営管理・店舗・デモが応答することを確認し、VM上の専用 `gemihub-dev/app` リポジトリの旧イメージを整理する。現在版・直前の正常版・コンテナが参照するイメージを残す。同じ版を再適用しても直前の正常版は保持する。
 
 ## 審査員向けの4店舗
 

@@ -69,7 +69,8 @@ for (const [industry, enabled] of [["restaurant", false], ["restaurant", true], 
     assert.equal(home.status, 200);
     const html = await home.text();
     assert.doesNotMatch(html, /href="[^"]*\?pane=(?:reserve|mine)/);
-    assert.match(html, /href="[^"]*\?pane=contact(?:&amp;lang=[a-z]+)?#email-login"/);
+    assert.match(html, /href="[^"]*\?pane=contact(?:&amp;lang=[a-z]+)?"/);
+    assert.doesNotMatch(html, /#email-login|class="public-auth"/);
     for (const pane of ["reserve", "mine"]) {
       const oldLink = await fetch(`${origin}${publicPath}?pane=${pane}`, { redirect: "manual" });
       assert.equal(oldLink.status, 302);

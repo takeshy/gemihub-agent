@@ -9,7 +9,7 @@ import { ShopAbout } from "./ShopAbout";
 import { LanguageLinks } from "./LanguageSwitcher";
 import { customerStartPane, navigationItems } from "../shared/navigation";
 import { getLocale, tr } from "../shared/i18n";
-import type { ShopConfig } from "../server/domain";
+import { reservationsEnabled, type ShopConfig } from "../server/domain";
 import { postKey, postLabel, postPath, type PublicPost, type PostCategory } from "../server/post-domain";
 import type { ShopPage } from "../server/pages";
 
@@ -51,7 +51,7 @@ export function StaticStorefront({ config: c, view, base, provisional = false, i
     <main><div className={`public-shop accent-${c.appearance?.accent || "sage"} layout-${c.appearance?.layout || "standard"}${hasThemeFrame(c.appearance?.theme) ? " custom-theme" : ""}`}>
       {provisional && <div className="preview-banner">{tr("仮公開中 · このページを用意したGoogleアカウントでログインした本人だけが表示できます。")}</div>}
       <SiteHeader config={c} resolvedImages={resolved}><Navigation config={c} base={base} /></SiteHeader>
-      <ThemeBody config={c} resolvedImages={resolved}>{c.industry !== "restaurant" && <section className="public-auth"><a className="button primary" href={`${link(`${base || "/"}?pane=${customerStartPane(c)}`)}#email-login`}>{tr("会員登録・ログイン")}</a></section>}{content}</ThemeBody>
+      <ThemeBody config={c} resolvedImages={resolved}>{c.industry !== "restaurant" && reservationsEnabled(c) && <section className="public-auth"><a className="button primary" href={`${link(`${base || "/"}?pane=${customerStartPane(c)}`)}#email-login`}>{tr("会員登録・ログイン")}</a></section>}{content}</ThemeBody>
       <SiteFooter config={c} resolvedImages={resolved} />
     </div></main>
   </>;

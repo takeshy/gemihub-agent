@@ -27,7 +27,7 @@ import { createRequestId } from "./request-id";
 import { articleKinds } from "../shared/article-features";
 import { storefrontScreenAvailable } from "../shared/navigation";
 import { standardTheme, themeHtmlKey } from "../shared/theme-editing";
-import { createPreviewClient, draftKey, fixturesSchema, readDraft, sampleFixtures, syncPreviewArticleFeatures, writeDraft, type LocalDraft, type Fixtures } from "./local-preview";
+import { createPreviewClient, draftKey, fixturesSchema, readDraft, sampleFixtures, syncPreviewFeatures, writeDraft, type LocalDraft, type Fixtures } from "./local-preview";
 
 type Snapshot = Pick<LocalDraft, "base" | "source" | "config"> & { lastPublishedPlanId?: string };
 export function LocalPreview({ shop, email, reload, sidebar, active = true, changesSelected = false, onChooseChanges, activate, onScreenChange, initialScreen, initialArticleKey }: { shop: Workspace; email: string; reload: () => Promise<unknown>; sidebar?: HTMLElement | null; active?: boolean; changesSelected?: boolean; onChooseChanges?: () => void; activate?: () => void; onScreenChange?: (screen: string, article?: string) => void; initialScreen?: string; initialArticleKey?: string }) {
@@ -130,7 +130,7 @@ export function LocalPreview({ shop, email, reload, sidebar, active = true, chan
     void run(async () => {
       const cached = readDraft(localStorage, key);
       if (cached && active) {
-        const updated = shop.published && !cached.pending ? syncPreviewArticleFeatures(cached, shop.published) : cached;
+        const updated = shop.published && !cached.pending ? syncPreviewFeatures(cached, shop.published) : cached;
         restore({ ...updated, downloaded: cached.downloaded || cached.source?.pages.map(p => p.id) || [] });
         setIndex(updated === cached ? cached.index : undefined);
       }
@@ -144,7 +144,7 @@ export function LocalPreview({ shop, email, reload, sidebar, active = true, chan
           // (e.g. a published article added to the fixtures) must not be reverted to the cached copy.
           const local = latestDraft.current || cached;
           if (!local.pending) {
-            const updated = refreshUneditedScopes(syncPreviewArticleFeatures(local, current.config), current.config, current.base);
+            const updated = refreshUneditedScopes(syncPreviewFeatures(local, current.config), current.config, current.base);
             restore({ ...updated, index: remote, downloaded: local.downloaded || local.source?.pages.map(p => p.id) || [], config: { ...updated.config, region: current.config.region, menus: current.config.menus, catalogProducts: current.config.catalogProducts, staff: current.config.staff, hours: current.config.hours, rules: current.config.rules } });
           }
         }
@@ -155,9 +155,9 @@ export function LocalPreview({ shop, email, reload, sidebar, active = true, chan
   useEffect(() => {
     const current = latestDraft.current;
     if (!current || current.pending || !shop.published) return;
-    const updated = syncPreviewArticleFeatures(current, shop.published);
+    const updated = syncPreviewFeatures(current, shop.published);
     if (updated !== current) { save(updated); setIndex(undefined); }
-  }, [key, shop.published?.appearance?.articles?.blogs, shop.published?.appearance?.articles?.announcements]);
+  }, [key, shop.published?.reservationsEnabled, shop.published?.appearance?.articles?.blogs, shop.published?.appearance?.articles?.announcements]);
   useEffect(() => {
     if (checkedRevision.current === shop.revision) return;
     checkedRevision.current = shop.revision;
@@ -221,7 +221,7 @@ export function LocalPreview({ shop, email, reload, sidebar, active = true, chan
     const valid = shopSchema.safeParse(config);
     if (!check.success || !valid.success) { setInvalid(tr("ページのタイトル・アドレス・画像を確認してください。同じアドレスは使えません。")); return; }
     setInvalid(""); save({ ...draft, config: valid.data });
-    setRoute({ pane: "reserve", pageSlug: page.slug });
+    setRoute({ pane: defaultScreen, pageSlug: page.slug });
   }
   function changeConfig(config: ShopConfig) {
     if (!draft || draft.pending) return false;
@@ -284,9 +284,9 @@ export function LocalPreview({ shop, email, reload, sidebar, active = true, chan
     setInvalid("");
     if (value.startsWith("page:")) {
       const page = latestDraft.current?.config.pages.find(p => p.id === value.slice(5)) || currentIndex?.pages.find(p=>p.id===value.slice(5));
-      setPageEditing(undefined); setRoute({ pane: "reserve", pageSlug: page?.slug }); setVersion(v => v + 1); return;
+      setPageEditing(undefined); setRoute({ pane: defaultScreen, pageSlug: page?.slug }); setVersion(v => v + 1); return;
     }
-    if (target.kind === "part" || value === "theme") { setRoute({ pane: value === "theme" ? "about" : "reserve" }); setVersion(v => v + 1); return; }
+    if (target.kind === "part" || value === "theme") { setRoute({ pane: value === "theme" ? "about" : defaultScreen }); setVersion(v => v + 1); return; }
     if (category === "blogs" || category === "announcements") {
       if (articleKey && article && !latestDraft.current?.fixtures.posts.some(post => post.category === category && postKey(post) === articleKey)) {
         const snapshot = await api<{ posts: PublicPost[] }>(`/api/shops/${shop.id}/publication-preview`);
@@ -297,12 +297,12 @@ export function LocalPreview({ shop, email, reload, sidebar, active = true, chan
           const fixtures = { ...current.fixtures, posts: [...current.fixtures.posts.filter(item => item.category !== category || postKey(item) !== articleKey).slice(0, 49), post] };
           save({ ...current, fixtures }); setFixtureEditing(structuredClone(fixtures));
         } else {
-          setScreen(category); setRoute({ category, pane: "reserve" });
+          setScreen(category); setRoute({ category, pane: defaultScreen });
           setNotice(tr("選んだ記事は公開内容から見つかりませんでした。一覧から確認してください。"));
           setVersion(v => v + 1); return;
         }
       }
-      setRoute({ category, articleKey: requestedArticle, pane: "reserve" });
+      setRoute({ category, articleKey: requestedArticle, pane: defaultScreen });
     } else setRoute({ pane: value });
     setVersion(v => v + 1);
   }

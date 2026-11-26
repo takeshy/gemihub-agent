@@ -3,7 +3,7 @@ import assert from "node:assert/strict";
 import { request, type IncomingHttpHeaders } from "node:http";
 import { createApp } from "../server/app.ts";
 import { Store, type Shop } from "../server/store.ts";
-import { sample, shopSchema } from "../server/domain.ts";
+import { bookableMenus, menuSelection, sample, shopSchema } from "../server/domain.ts";
 import { basicSchema, liveValue, updateLiveValue } from "../server/live-settings.ts";
 import { shopGuideInfo } from "../server/shop-guide.ts";
 
@@ -30,11 +30,36 @@ test("other shops save products as basic settings and expose only published prod
   assert.deepEqual(shopGuideInfo({ ...c, products: undefined, menus: [] }, "https://shop.example/").products, []);
 });
 
+test("service settings save priced products without a duration or booking assignment", () => {
+  const original = config();
+  const product = { id: "notebook", name: "Notebook", price: 1200, active: true };
+  const hidden = { ...product, id: "pen", name: "Pen", active: false };
+  const value = { menus: original.menus, catalogProducts: [product, hidden] };
+  const saved = updateLiveValue(original, "menus", value);
+  assert.deepEqual(liveValue(saved, "menus"), value);
+  assert.deepEqual(updateLiveValue(saved, "menus", original.menus).catalogProducts, value.catalogProducts);
+  assert.deepEqual(saved.products, original.products);
+  assert.deepEqual(bookableMenus(saved), bookableMenus(original));
+  assert.equal(menuSelection(saved, product.id), undefined);
+  assert.equal(menuSelection(saved, original.menus[0].id, [product.id]), undefined);
+  const info = shopGuideInfo(saved, "https://shop.example/");
+  assert.deepEqual(info.catalog, [{ id: product.id, name: product.name, price: 1200, currency: "JPY" }]);
+  assert.ok(info.products.includes(product.name));
+  assert.ok(!info.products.includes(hidden.name));
+  assert.throws(() => updateLiveValue(saved, "menus", { ...value, menus: [{ ...original.menus[0], duration: undefined }] }));
+  assert.throws(() => updateLiveValue(saved, "menus", { ...value, catalogProducts: [{ ...product, price: 5.25 }] }));
+});
+
 test("other shop pages and custom hosts serve an actionable chat/voice guide with only get_shop_info", async t => {
   const previous = { ...process.env };
   Object.assign(process.env, { DEMO_MODE: "true", SITE_DOMAIN: "shops.test", AGENT_PARENT_URL: "https://guide.example" });
   const store = new Store(":memory:");
   const shop: Shop = { id: "komado-test", slug: "komado", owner: "owner@example.com", published: config(), publication: "public", draft: { ...config(), products: ["下書きの品"] }, revision: 1, history: [] };
+  shop.published!.catalogProducts = [
+    { id: "notebook", name: "方眼ノート", price: 1200, active: true },
+    { id: "sample", name: "試作ノート", price: 1500, active: false },
+  ];
+  shop.published!.screens = { ...shop.published!.screens, about: { html: "<section><slot name='hours'></slot></section>", css: "" } };
   await store.saveShop(shop);
   const server = createApp(store);
   await new Promise<void>(resolve => server.listen(0, "127.0.0.1", resolve));
@@ -54,6 +79,11 @@ test("other shop pages and custom hosts serve an actionable chat/voice guide wit
     const base = hosted ? "" : "/s/komado";
     const page = await call(base + "/", undefined, host);
     assert.equal(page.status, 200);
+    assert.match(page.body, /方眼ノート/);
+    assert.match(page.body, /1,200/);
+    assert.doesNotMatch(page.body, /試作ノート/);
+    const publicConfig = (await call("/api/public/komado", undefined, host)).json.config;
+    assert.deepEqual(publicConfig.catalogProducts.map((product: { name: string }) => product.name), ["方眼ノート"]);
     assert.match(page.body, /data-agent-kind="shop"/);
     assert.match(page.body, /営業時間やお休み、扱っている品/);
     assert.match(page.body, /id="assistant-toggle"/);
@@ -71,7 +101,8 @@ test("other shop pages and custom hosts serve an actionable chat/voice guide wit
     assert.equal((await rpc("initialize")).result.serverInfo.name, "gemihub-shop");
     assert.deepEqual((await rpc("tools/list")).result.tools.map((tool: any) => tool.name), ["get_shop_info"]);
     const info = (await rpc("tools/call", { name: "get_shop_info", arguments: {} })).result.structuredContent;
-    assert.deepEqual(info.products, ["作家の器", "手帳", "包装の相談"]);
+    assert.deepEqual(info.products, ["作家の器", "手帳", "包装の相談", "方眼ノート"]);
+    assert.deepEqual(info.catalog, [{ id: "notebook", name: "方眼ノート", price: 1200, currency: "JPY" }]);
     assert.doesNotMatch(JSON.stringify(info), /下書きの品|非公開の品|private-owner/);
     assert.equal((await rpc("tools/call", { name: "check_availability" })).error.code, -32602);
     assert.equal((await rpc("tools/call", { name: "place_reservation" })).error.code, -32602);

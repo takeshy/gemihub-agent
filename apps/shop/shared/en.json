@@ -4610,5 +4610,10 @@
   "今のデザインと見比べて、使うかどうか選べます。": "Compare it with the current design and choose whether to use it.",
   "今のデザインのままにする": "Keep the current design",
   "反映しています…": "Applying…",
-  "先にデザインを反映してください。": "Apply the design first."
+  "先にデザインを反映してください。": "Apply the design first.",
+  "この画面案のデザインは利用できません。": "The design for this preview is unavailable.",
+  "お店専用のデザインを作成中です。完成すると、この画面に表示されます。": "Your shop’s design is being created. It will appear here when it’s ready.",
+  "標準デザインで仮公開する": "Open a private preview with the standard design",
+  "デザインの提案が変わりました。画面を読み直して確認してください。": "The proposed design has changed. Reload this page to review it.",
+  "仮公開中は、このページを用意したGoogleアカウントでログインした本人だけが見られます。": "During private preview, only the Google account that set up this page can view it."
 }

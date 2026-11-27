@@ -221,6 +221,7 @@ type ThemeProposal = {
   shopId: string;
   status: "generating" | "ready" | "failed" | "dismissed" | "applied";
   themeRunId: string;
+  planId?: string;
   request: string;
   imageIds: string[];
   config: ShopConfig;
@@ -596,6 +597,16 @@ export function createApp(
     store.afterCommit(() => { void runThemeProposal(proposal).catch(reportError); });
     return proposal;
   }
+  const proposalMatchesPlan = (proposal: ThemeProposal | undefined, plan: Plan) =>
+    !!proposal && !!plan.themeProposal && proposal.themeRunId === plan.themeRunId && (!proposal.planId || proposal.planId === plan.id);
+  async function themeProposalFor(shopId: string, planId: string | null) {
+    if (planId === null) return store.get<ThemeProposal>("themeProposal", shopId);
+    const [proposal, plan] = await Promise.all([
+      store.get<ThemeProposal>("themeProposal", shopId),
+      store.get<Plan>("plan", planId),
+    ]);
+    return plan?.shopId === shopId && proposalMatchesPlan(proposal, plan) ? proposal : undefined;
+  }
   function themeProposalView(proposal: ThemeProposal | undefined) {
     if (!proposal || proposal.status === "dismissed" || proposal.status === "applied") return { status: "none" as const };
     const lost = proposal.status === "generating" && themeJobs.get(proposal.shopId) !== proposal.startedAt && (proposal.updatedAt < serverStartedAt || Date.now() - proposal.updatedAt > themeProposalStaleMs);
@@ -606,7 +617,7 @@ export function createApp(
     const proposal = await store.get<ThemeProposal>("themeProposal", shop.id);
     if (blocksPublication(themeProposalView(proposal).status)) fail(409, tr("お店専用のデザインを決めてから本番公開してください。"));
   }
-  async function savePublicShop(shop: Shop) {
+  async function savePublicShop(shop: Shop, appliedTheme?: ThemeProposal) {
     let dropped: StorefrontRelease[] = [];
     if (shop.published) {
       try {
@@ -629,8 +640,12 @@ export function createApp(
     const firstPublicRelease = shop.publication === "public" && !!shop.published &&
       (!current?.published || current.publication === "provisional");
     if (firstPublicRelease && !shop.judge && parentListingEnabled()) shop.parentListing = "pending";
-    if (JSON.stringify(current?.published) === JSON.stringify(shop.published)) await store.saveShop(shop);
-    else await store.locked(bookingLockKey(shop.id), () => store.saveShop(shop));
+    const save = () => appliedTheme ? store.transaction(async () => {
+      await store.saveShop(shop);
+      await store.put("themeProposal", shop.id, { ...appliedTheme, status: "applied", updatedAt: Date.now() });
+    }) : store.saveShop(shop);
+    if (JSON.stringify(current?.published) === JSON.stringify(shop.published)) await save();
+    else await store.locked(bookingLockKey(shop.id), save);
     if (firstPublicRelease && shop.parentListing === "pending") scheduleParentListing(shop.id);
     // Only releases older than the retained ones are removed; a failed cleanup is retried on the next release.
     if (dropped.length) {
@@ -1008,7 +1023,7 @@ export function createApp(
     // Converts old publications and refreshes releases from an older generator.
     await ensureStorefront(fresh).catch(error => console.error(`Storefront ${fresh.id}: background release failed`, error));
   });
-  async function publishConfiguration(fresh: Shop, plan: Plan, publication = fresh.publication || (fresh.published ? "public" : "provisional"), menusOnly = false, actor?: User) {
+  async function publishConfiguration(fresh: Shop, plan: Plan, publication = fresh.publication || (fresh.published ? "public" : "provisional"), menusOnly = false, actor?: User, appliedTheme?: ThemeProposal) {
     if (fresh.google && !fresh.storage) fail(409, tr("既存のDriveファイルをCloud Storageへ移行してください。"));
     const timed = async <T,>(phase: string, work: () => Promise<T>): Promise<T> => {
       const started = Date.now();
@@ -1084,7 +1099,7 @@ export function createApp(
     fresh.revision++;
     fresh.lastPublishedPlanId = plan.id;
     retireDesignVersions(fresh);
-    await timed("storefront", () => savePublicShop(fresh));
+    await timed("storefront", () => savePublicShop(fresh, appliedTheme));
     await pruneDesignVersions(fresh, versions, async () => store.saveShop(fresh)).catch(reportError);
     if (!menusOnly && (!plan.scope || plan.scope.kind === "shared" || plan.scope.kind === "theme" || plan.scope.kind === "content")) await enqueue(fresh, "posts");
     // The public release and the complete design snapshot are committed. Article exports retry in the durable worker.
@@ -2428,6 +2443,10 @@ export function createApp(
           fail(404, tr("見つかりません"));
         }
         // These reads must stay available while a model call holds the shop write lock.
+        if (action === "theme-proposal" && method === "GET") {
+          assertOwner(user, shop);
+          return json(res, themeProposalView(await themeProposalFor(shop.id, url.searchParams.get("plan"))));
+        }
         if (action === "conversations" && method === "GET") return json(res, { email: user!.email, conversations: await conversations(store, shop, user!.email) });
         const visualProgress = action.match(/^visual\/([^/]+)\/progress$/);
         if (visualProgress && method === "GET") {
@@ -3589,7 +3608,7 @@ export function createApp(
                 await store.put("plan", plan.id, plan);
                 if (input.chat) await attachChatPlan(store,fresh,user!.email,input.chat,plan.id);
                 await saveGeneration({ stage: "complete", planId: plan.id, preview: undefined });
-                if (deferredTheme) await startThemeProposal({ shopId: fresh.id, themeRunId: themeRunId!, request: proposalText.slice(0, 10000), imageIds: planImageIds, config: plan.config });
+                if (deferredTheme) await startThemeProposal({ shopId: fresh.id, themeRunId: themeRunId!, planId: plan.id, request: proposalText.slice(0, 10000), imageIds: planImageIds, config: plan.config });
               });
               return json(res, plan);
             } catch (error) {
@@ -3620,8 +3639,20 @@ export function createApp(
               await store.saveShop(fresh);
               return json(res, { ok: true });
             }
-            const input = z.object({ publication: z.enum(["provisional", "public"]).optional() }).parse(await body(req));
-            return json(res, await publishConfiguration(fresh, plan, input.publication, false, user));
+            const input = z.object({ publication: z.enum(["provisional", "public"]).optional(), themeStartedAt: z.number().int().positive().optional() }).parse(await body(req));
+            let appliedTheme: ThemeProposal | undefined;
+            if (input.themeStartedAt !== undefined) {
+              const proposal = await store.get<ThemeProposal>("themeProposal", fresh.id);
+              if (fresh.published || input.publication === "public" || !proposal?.theme || proposal.status !== "ready" ||
+                proposal.startedAt !== input.themeStartedAt || !proposalMatchesPlan(proposal, plan))
+                fail(409, tr("デザインの提案が変わりました。画面を読み直して確認してください。"));
+              appliedTheme = proposal;
+              plan.config = shopSchema.parse({
+                ...plan.config,
+                appearance: { accent: "sage", layout: "standard", imageUrl: "", ...plan.config.appearance, theme: proposal.theme },
+              });
+            }
+            return json(res, await publishConfiguration(fresh, plan, input.publication, false, user, appliedTheme));
           }
           if (action === "publication-preview" && method === "GET") {
             assertOwner(user, fresh);
@@ -3630,13 +3661,9 @@ export function createApp(
             const posts = publicPosts(await postsFor(fresh));
             return json(res, { config, posts, publication: fresh.publication || "public", revision: fresh.revision, hash: contentHash({ config, posts }) });
           }
-          if (action === "theme-proposal" && method === "GET") {
+          if (method === "POST" && /^theme-proposal\/(?:retry|dismiss|applied)$/.test(action)) {
             assertOwner(user, fresh);
-            return json(res, themeProposalView(await store.get<ThemeProposal>("themeProposal", fresh.id)));
-          }
-          if (/^theme-proposal\/(?:retry|dismiss|applied)$/.test(action) && method === "POST") {
-            assertOwner(user, fresh);
-            const proposal = await store.get<ThemeProposal>("themeProposal", fresh.id) || fail(404, tr("デザインの提案がありません"));
+            const proposal = await themeProposalFor(fresh.id, url.searchParams.get("plan")) || fail(404, tr("デザインの提案がありません"));
             const verb = action.split("/")[1];
             if (verb === "retry") {
               if (themeProposalView(proposal).status !== "failed") fail(409, tr("デザインは作成中か、作成済みです"));

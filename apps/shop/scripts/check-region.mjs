@@ -33,23 +33,35 @@ try {
     const shop=await store.createShop(`region-${width}@example.com`);
     const config=structuredClone(sample);config.name='Pacific Studio';config.menus[0].name='Consultation';config.menus[0].price=55;
     config.hours.closedWeekdays=[];config.rules.sameDay=true;
+    config.catalogProducts=[{id:'notebook',name:'Notebook',price:12,active:true}];
     shop.published=config;await store.saveShop(shop);
     const context=await browser.newContext({viewport:{width,height:950},locale:'en-US',timezoneId:'America/Los_Angeles'});
     const login=await context.request.post(origin+'/api/demo-login',{headers:{Origin:origin},data:{role:'owner',email:shop.owner}});assert.equal(login.status(),200);
     const page=await context.newPage();activePage=page;page.on('pageerror',e=>errors.push(e.message));page.setDefaultTimeout(15000);
-    await page.goto(origin+'/');await page.locator('aside nav').getByRole('button',{name:/Shop information$/}).click();
+    async function openSettings(label) {
+      if (width <= 760) await page.locator('.mobile-menu-toggle[aria-expanded="false"]').click();
+      await page.locator('aside nav').getByRole('button', {name:label}).click();
+    }
+    await page.goto(origin+'/');
+    await openSettings(/Shop information$/);
     const settings=page.locator('.live-settings-basic');const country=settings.getByLabel('Country (currency)',{exact:true});
     await country.waitFor();assert.equal(await country.inputValue(),'JP','existing Japanese shops stay JP in an English browser');
     await country.selectOption('US');
     const zone=settings.getByLabel('Time zone',{exact:true});assert.equal(await zone.locator('option').count(),7);
     await zone.selectOption('America/Los_Angeles');await settings.getByRole('button',{name:'Save',exact:true}).click();
-    await settings.getByText('Saved and applied to the live site.',{exact:true}).waitFor();
+    await settings.getByText('Saved.',{exact:true}).waitFor();
     assert.deepEqual((await store.shop(shop.id)).published.region,{country:'US',timeZone:'America/Los_Angeles'});
     await page.screenshot({path:`tmp/region/settings-us-${width}.png`,fullPage:true});
-    await page.locator('aside nav').getByRole('button',{name:/Services and prices$/}).click();const menus=page.locator('.live-settings-menus');
+    await openSettings(/Services and products$/);
+    const menus=page.locator('.live-settings-menus');
+    for (const label of ['＋ Add service', '＋ Add product']) {
+      const add = menus.getByRole('button', { name: label, exact: true });
+      await add.waitFor();
+      assert.equal(await add.evaluate(button => getComputedStyle(button).marginTop), '16px');
+    }
     const price=menus.getByLabel('Price (USD)',{exact:true}).first();await price.waitFor();assert.equal(await price.getAttribute('step'),'0.01');
     await price.fill('55.25');await menus.getByRole('button',{name:'Save',exact:true}).click();
-    await menus.getByText('Saved and applied to the live site.',{exact:true}).waitFor();
+    await menus.getByText('Saved.',{exact:true}).waitFor();
     const saved=(await store.shop(shop.id)).published;assert.equal(saved.menus[0].price,55.25);exported=saved;
     await page.goto(origin+'/?tab=try');await page.locator('.local-preview-screen').waitFor();
     await page.locator('.local-preview-screen').getByText('$55.25',{exact:false}).first().waitFor();

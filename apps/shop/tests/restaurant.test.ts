@@ -2,7 +2,7 @@ import { test } from "node:test";
 import assert from "node:assert/strict";
 import type { AddressInfo } from "node:net";
 import { createApp } from "../server/app.ts";
-import { allowDemoShoppers } from "../server/auth.ts";
+import { allowDemoShoppers, digest } from "../server/auth.ts";
 import { Store } from "../server/store.ts";
 import { storefrontRenderer } from "../server/storefront-build.tsx";
 import { request as httpRequest } from "node:http";
@@ -426,6 +426,16 @@ test("reservation pages share the published theme and upgrade releases missing t
   assert.doesNotMatch(page, /class="panel about"|agent\/reserve\.css/);
   assert.equal(page.match(/href="([^"]*\/_assets\/[^"]*\.css)"/)?.[1], home.match(/href="([^"]*\/_assets\/[^"]*\.css)"/)?.[1]);
   assert.equal((await store.shop(shop.id))!.storefrontRelease!.renderer, storefrontRenderer);
+
+  shop = (await store.shop(shop.id))!;
+  shop.publication = "provisional";
+  await store.saveShop(shop);
+  await store.put("session", digest("akari-preview-owner"), { user: { email: shop.owner, name: "Owner", role: "owner", shopId: shop.id }, expires: Date.now() + 600000 });
+  const preview = await get("/s/akari/reserve", { Cookie: "gemihub_session=akari-preview-owner" });
+  assert.equal(preview.status, 200);
+  const previewHtml = await preview.text();
+  assert.match(previewHtml, /id="reserve-form"/);
+  assert.doesNotMatch(previewHtml, /id="assistant-toggle"|id="assistant"|agent-manifest|AIもご利用いただけます/);
 });
 
 test("a salon keeps its staff-based booking and has no agent bundle", async t => {

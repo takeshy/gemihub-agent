@@ -4623,7 +4623,14 @@ export function createApp(
             // fixed section for this shop's owner/customer, including older releases.
             data = signedIn ? Buffer.from(html.toString().replace(/<section class="public-auth"><a class="button primary" href="[^"]*#email-login">[^<]*<\/a><\/section>/, "")) : Buffer.from(html);
             let assistantVersion = "";
-            if (shop.published && supportsShopAgent(shop.published)) {
+            // Saved restaurant reservation pages contain their own assistant launcher.
+            // Suppress it and its invitation when the agent bundle is unavailable.
+            if (category === "reserve" && shop.publication === "provisional") {
+              const launcher = /<p>[^<]*<\/p>(?=<button id="assistant-toggle")|<button id="assistant-toggle"[^>]*>[^<]*<\/button>/g;
+              data = Buffer.from(data.toString().replace(launcher, ""));
+            }
+            // The agent bundle is served only for public shops.
+            if (shop.published && supportsShopAgent(shop.published) && shop.publication !== "provisional") {
               const assistant = storefrontAssistant({ slug: shop.slug, config: shop.published }, publicHost ? { origin: `https://${host}`, base: "" } : appSite(origin(), shop.slug), category === "reserve");
               data = Buffer.from(data.toString().replace(/<html\b/, () => `<html${assistant.attributes}`).replace("</head>", () => `${assistant.head}</head>`).replace("</body>", () => `${assistant.body}</body>`));
               if (assistant.frameable) res.removeHeader("X-Frame-Options");

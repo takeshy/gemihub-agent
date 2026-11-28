@@ -99,6 +99,7 @@ This applies to eligible PayPal-prepaid bookings and services that allow replace
   Business data (settings, bookings, customers, inquiries, articles, and AI chats) lives in **Firestore**. Owners can download a JSON export or CSV tables from **Publication settings**. Images, attachments, specs, history, and offline HTML exports remain in the service’s **Cloud Storage**; exported records include file references, not the file bytes.
 - **Public storefront as generated pages:**
   Publishing (and saving settings, designs or articles) generates the shop's home, custom pages, article archives and articles as finished HTML in Japanese and English, and stores them in a private Cloud Storage bucket. The server checks access and returns the stored page, so public content needs no JavaScript or API calls and carries search metadata and sitemaps. CSS and images are stored once per shop and cached by browsers. Booking, My page and inquiries open the app as interactive screens.
+  The public home page includes schema.org JSON-LD for the business type, visible opening hours, menus, services and products with their listed prices.
 
 ---
 

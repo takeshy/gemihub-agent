@@ -13,6 +13,9 @@ import type { StorefrontFiles } from "../server/storefront-files.ts";
 import type { Post } from "../server/post-domain.ts";
 import { imageUses, managedImageIds } from "../server/image-references.ts";
 
+import { standardTheme } from "../shared/theme-editing.ts";
+import { restaurantDemoShops } from "../scripts/seed-restaurant-demo.ts";
+
 process.env.DEMO_MODE = "true";
 
 test("a retail storefront without reservations keeps its about page, products and inquiry link", () => {
@@ -31,6 +34,75 @@ test("a retail storefront without reservations keeps its about page, products an
     assert.match(html, /class="panel about"/);
     assert.match(html, /Grid Notebook/);
     assert.doesNotMatch(html, /pane=(?:reserve|mine)|<h3>Staff<\/h3>/);
+  }
+});
+
+test("a public restaurant home page embeds schema.org Restaurant JSON-LD with the hours, menu and list prices it shows", () => {
+  const config = restaurantDemoShops("2030-01-11")[0].config;
+  config.hours.holidays = ["2030-12-31"];
+  config.hours.specialDays = [{ date: "2030-12-30", start: "11:00", end: "15:00" }];
+  config.catalogProducts = [{ id: "sake", name: "Bottled sake", price: 3000, active: true }];
+  const published = shopSchema.parse({ ...config, name: "Robata Test" });
+  const shell = { html: '<html><head></head><body><div id="root"></div></body></html>', css: "" };
+  const jsonLd = (html: string) => JSON.parse(html.match(/<script type="application\/ld\+json">([\s\S]*?)<\/script>/)![1]);
+  const shop = { id: "robata", slug: "robata", owner: "owner@example.com", published, draft: null, revision: 1, history: [] };
+  const html = buildStorefront(shop, [], "https://app.example.com", shell).pages[storefrontFile("", false, "en")];
+  const ld = jsonLd(html);
+  assert.equal(ld["@type"], "Restaurant");
+  assert.equal(ld.name, "Robata Test");
+  assert.ok(ld.openingHoursSpecification.every((spec: { dayOfWeek?: unknown; validFrom?: string }) => spec.dayOfWeek && !spec.validFrom));
+  assert.ok(ld.specialOpeningHoursSpecification.some((spec: { validFrom?: string; opens: string }) => spec.validFrom === "2030-12-31" && spec.opens === "00:00"));
+  assert.ok(ld.specialOpeningHoursSpecification.some((spec: { validFrom?: string; opens: string }) => spec.validFrom === "2030-12-30" && spec.opens === "11:00"));
+  const items = ld.hasMenu.hasMenuItem.map((item: { name: string }) => item.name);
+  assert.ok(items.length > 0);
+  assert.deepEqual(ld.makesOffer, [{ "@type": "Offer", price: 3000, priceCurrency: "JPY", itemOffered: { "@type": "Product", name: "Bottled sake" } }]);
+  const first = config.menus.find(menu => menu.active)!;
+  assert.deepEqual(ld.hasMenu.hasMenuItem[0], { "@type": "MenuItem", name: first.name, offers: { "@type": "Offer", price: first.price, priceCurrency: "JPY" } });
+  for (const item of [...items, "Bottled sake"]) assert.ok(html.slice(html.indexOf("<body")).includes(item), `${item} is shown on the page`);
+  assert.match(String(ld.acceptsReservations), /\/reserve$/);
+  assert.doesNotMatch(JSON.stringify(ld), /total|availab/i, "list prices only, never totals or seats");
+  published.screens = { about: { html: "<section>Welcome</section>", css: "" } };
+  published.header.showDetails = false;
+  const customHtml = buildStorefront(shop, [], "https://app.example.com", shell).pages[storefrontFile("", false, "en")];
+  const custom = jsonLd(customHtml);
+  assert.equal(custom.hasMenu, undefined);
+  assert.equal(custom.openingHoursSpecification, undefined);
+  assert.equal(custom.specialOpeningHoursSpecification, undefined);
+  assert.deepEqual(custom.makesOffer, ld.makesOffer);
+  assert.match(customHtml.slice(customHtml.indexOf("<body")), /Bottled sake/);
+
+  published.header.showDetails = true;
+  const home = () => buildStorefront(shop, [], "https://app.example.com", shell).pages[storefrontFile("", false, "en")];
+  const headerHtml = home();
+  assert.match(headerHtml, /class="salon-details"/);
+  assert.deepEqual(jsonLd(headerHtml).openingHoursSpecification, ld.openingHoursSpecification);
+  assert.equal(jsonLd(headerHtml).specialOpeningHoursSpecification, undefined);
+
+  published.appearance!.theme = { ...standardTheme, headerHtml: '<header><slot name="navigation"></slot></header>' };
+  const hiddenHtml = home();
+  assert.doesNotMatch(hiddenHtml, /class="salon-details"/);
+  assert.equal(jsonLd(hiddenHtml).openingHoursSpecification, undefined);
+});
+
+test("published salons and other shops classify active services separately from retail goods", () => {
+  const shell = { html: '<html><head></head><body><div id="root"></div></body></html>', css: "" };
+  for (const [industry, businessType, service, product] of [
+    ["hair", "HairSalon", "Haircut", "Shampoo"],
+    ["other", "LocalBusiness", "Repair appointment", "Repair kit"],
+  ] as const) {
+    const published = shopSchema.parse({ ...structuredClone(sample), industry, staff: [],
+      menus: [30, 60].map(duration => ({ id: `service-${duration}`, name: service, duration, price: duration * 100, active: true })),
+      catalogProducts: [500, 900].map(price => ({ id: `retail-${price}`, name: product, price, active: true })),
+    });
+    const shop = { id: industry, slug: industry, owner: "owner@example.com", published, draft: null, revision: 1, history: [] };
+    const html = buildStorefront(shop, [], "https://app.example.com", shell).pages[storefrontFile("", false, "en")];
+    const ld = JSON.parse(html.match(/<script type="application\/ld\+json">([\s\S]*?)<\/script>/)![1]);
+    assert.equal(ld["@type"], businessType);
+    assert.deepEqual(ld.makesOffer.map((offer: { itemOffered: unknown }) => offer.itemOffered), [
+      { "@type": "Service", name: service }, { "@type": "Service", name: service },
+      { "@type": "Product", name: product }, { "@type": "Product", name: product },
+    ]);
+    assert.deepEqual(ld.makesOffer.map((offer: { price: number }) => offer.price), [3000, 6000, 500, 900]);
   }
 });
 

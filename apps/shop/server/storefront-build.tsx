@@ -10,7 +10,10 @@ import { tr } from "../shared/i18n.ts";
 import { localizeShell } from "../shared/html.ts";
 import { escapeHtml } from "./artifacts.ts";
 import { withImageSources } from "./image-references.ts";
-import { restaurantReservations } from "./domain.ts";
+import { hoursText, publishedProducts, restaurantReservations } from "./domain.ts";
+import { shopJsonLd, jsonLdScript } from "./schema-org.js";
+import { compilePresentation, presentationSlots, themePart } from "../shared/presentation.ts";
+import { currencyOf, regionOf } from "../shared/region.ts";
 import { postKey, postLabel, type PublicPost } from "./post-domain.ts";
 import type { MenuImageData } from "./menu-image-domain.ts";
 import type { Shop } from "./store.ts";
@@ -21,7 +24,7 @@ import { forEachConcurrent } from "./concurrency.ts";
  * Bump when the generated markup changes in a way existing shops should receive.
  * Releases from an older generator keep being served until they are rebuilt in the background.
  */
-export const storefrontRenderer = 12;
+export const storefrontRenderer = 14;
 /** `assets` are shop-level files (`shops/{id}/assets/{name}`) the pages refer to; absent on releases before renderer 2. */
 export type StorefrontRelease = { id: string; paths: string[]; assets?: string[]; renderer?: number; posts?: Record<string, string> };
 export type StorefrontAsset = { body: Buffer; contentType: string };
@@ -83,13 +86,36 @@ export function buildStorefront(shop: Shop, posts: PublicPost[], origin: string,
       const base = hosted ? "" : `/s/${shop.slug}`;
       const sources = Object.fromEntries(Object.entries(imageNames).map(([id, name]) => [id, `${base}/_assets/${name}`]));
       const c = withImageSources(published, sources);
+      let shown = ["menus", "hours"];
+      if (c.screens?.about) {
+        try { shown = compilePresentation(c.screens.about).slots; }
+        catch { /* ShopAbout renders its default layout when the design cannot be compiled. */ }
+      }
+      const services = shown.includes("menus") ? c.menus.filter(menu => menu.active).map(menu => ({
+        id: menu.id, name: menu.name, price: menu.price, currency: currencyOf(regionOf(c)),
+        type: c.industry === "restaurant" ? "MenuItem" as const : "Service" as const,
+      })) : [];
+      const aboutHours = shown.includes("hours");
+      const headerHours = c.header.showDetails && presentationSlots(themePart(c.appearance?.theme, "header"),
+        ["title", "subtitle", "details", "image", "navigation"], ["details"]);
+      // ShopAbout renders the catalog below the layout when the menus slot is absent.
+      const homeJsonLd = {
+        ...shopJsonLd({
+          name: c.name, description: c.description, address: c.address, pageUrl: new URL(canonical).href,
+          hours: aboutHours || headerHours ? { regular: hoursText(c), closedWeekdays: c.hours.closedWeekdays,
+            weekdayHours: c.hours.weekdayHours, ...(aboutHours ? { closedDates: c.hours.holidays, specialDays: c.hours.specialDays } : {}) } : undefined,
+          products: [...services, ...publishedProducts(c).map(product => ({ ...product, type: "Product" as const }))],
+          ...(restaurantReservations(c) ? { reservationEnabled: true, reservationUrl: `${canonical}/reserve` } : {}),
+        }, { industry: c.industry, prices: true }),
+        ...(headerImage ? { image: headerImage } : {}),
+      };
       const render = (view: StaticStorefrontView, title: string, description: string) => {
         const path = staticViewPath(view), post = view.kind === "article" ? view.post : undefined;
         const url = path ? `${canonical}/${path}` : new URL(canonical).href;
         // Each language has its own URL so both can be indexed; Japanese is the default.
         const localized = (language: string) => language === "ja" ? url : `${url}?lang=${language}`;
         const text = plainText(description);
-        const jsonLd = post ? { "@context": "https://schema.org", "@type": post.category === "blogs" ? "BlogPosting" : "Article", headline: post.title, datePublished: post.publishedAt || post.date, url: localized(locale), inLanguage: locale, publisher: { "@type": "Organization", name: c.name }, ...(headerImage ? { image: headerImage } : {}) } : !path ? { "@context": "https://schema.org", "@type": "LocalBusiness", name: c.name, ...(c.description ? { description: c.description } : {}), ...(c.address ? { address: c.address } : {}), url, ...(headerImage ? { image: headerImage } : {}) } : undefined;
+        const jsonLd = post ? { "@context": "https://schema.org", "@type": post.category === "blogs" ? "BlogPosting" : "Article", headline: post.title, datePublished: post.publishedAt || post.date, url: localized(locale), inLanguage: locale, publisher: { "@type": "Organization", name: c.name }, ...(headerImage ? { image: headerImage } : {}) } : view.kind === "home" ? homeJsonLd : undefined;
         const head = [
           `<title>${escapeHtml(title)}</title>`,
           stylesheet && `<link rel="stylesheet" href="${base}/_assets/${stylesheet}">`,
@@ -102,7 +128,7 @@ export function buildStorefront(shop: Shop, posts: PublicPost[], origin: string,
           `<meta property="og:locale" content="${locale === "en" ? "en_US" : "ja_JP"}">`,
           headerImage && `<meta property="og:image" content="${escapeHtml(headerImage)}">`,
           `<meta name="twitter:card" content="${headerImage ? "summary_large_image" : "summary"}">`,
-          jsonLd && !noindex && `<script type="application/ld+json">${JSON.stringify(jsonLd).replace(/</g, "\\u003c")}</script>`,
+          jsonLd && !noindex && `<script type="application/ld+json">${jsonLdScript(jsonLd)}</script>`,
           post && `<meta name="gemihub-post-category" content="${post.category}"><meta name="gemihub-post-title" content="${escapeHtml(post.title)}"><meta name="gemihub-post-date" content="${post.date}">`,
         ].filter(Boolean).join("");
         const body = renderToStaticMarkup(<StaticStorefront config={c} view={view} base={base} provisional={shop.publication === "provisional"} imageSources={sources} />);

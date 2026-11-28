@@ -415,6 +415,8 @@ Normal links open public pages. Booking, My page and inquiries use `?pane=reserv
 
 Generated pages include title, description, Open Graph, canonical and structured data. Choose a verified custom domain, then a shop subdomain, then `/s/{slug}` as the canonical address; the English page's canonical adds `?lang=en`, and hreflang links pair the languages. A managed header image is the Open Graph image. Sitemaps include public articles and custom pages. Provisional, judge and operation screens are noindex. Shops without a static release, or with one from an older generator, are rebuilt by the background loop with backoff after failures. A shop without any release is also converted once on its first visit; subsequent visits read stored HTML.
 
+The public home page uses schema.org JSON-LD with the type `Restaurant`, `HairSalon`, `NailSalon` or `LocalBusiness`. Include weekly hours and regular closing days when the header or shop information section displays them. Include holiday closures and special opening hours when the shop information section displays those dates. Publish visible restaurant menus as `MenuItem`, other service menus as `Service`, and catalog goods as `Product`, with their listed price and currency. Entries with different IDs retain their individual prices even when they share a name.
+
 Verify with `npm test`, `npm run check:storefront-static`, and the shared public markup in Storybook under `公開ページ/静的HTML`. Cover partial upload failure, old-release availability during publishing, withdrawal, private previews, JS-disabled/API-blocked public pages and authenticated booking in both languages at desktop/mobile widths.
 
 

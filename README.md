@@ -13,6 +13,7 @@
 
 - **Conversational Storefront Builder (`apps/shop/`)**  
   Restaurants, craft & stationery stores, salons, and other local businesses can generate and update custom-designed websites, menus, and booking flows using natural language and photos.
+  Public storefronts include schema.org JSON-LD for the business type, displayed hours, offerings and list prices.
   Going live adds the storefront to the town guide. Owners can start over from Settings → Shop information.
 - **Town-Guide AI × Distributed Shop AIs**  
   Given combined visitor constraints (date/time, party size, dietary restrictions, follow-up stops, etc.), the town-guide AI queries participating shops' read-only MCP agents upon user confirmation, compares availability and offerings, and suggests a multi-stop route.

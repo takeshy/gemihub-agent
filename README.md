@@ -4,13 +4,27 @@
 
 **gemihub** is a non-homogenizing local town portal where independent shops can build and run their own bespoke websites simply by talking to AI, and a town-guide AI coordinates across every shop's AI and local community documents to recommend places and itineraries via text, voice, and multiple languages.
 
-![Home page of the Okurayama town guide](docs/screenshots/okurayama-town-guide.jpg)
+## Finding a table with the town guide
 
-The Okurayama town guide (Japanese demo), where visitors can ask about local shops and community information.
+This walkthrough uses the Japanese interface with sample availability and prices.
 
-| Describe the shop to the AI | Compare storefront designs |
-| --- | --- |
-| [![Describe the shop to the AI](apps/shop/public/manual/en/02-interview.jpg)](apps/shop/public/manual/en/02-interview.jpg) | [![Compare storefront designs](apps/shop/public/manual/en/61-design-compare.jpg)](apps/shop/public/manual/en/61-design-compare.jpg) |
+**Tell the town guide what you need**
+
+A visitor asks for dinner for 12 at 7 p.m., under ¥5,000 per person, and asks to avoid shrimp. The guide records the request.
+
+![Tell the town guide what you need](docs/screenshots/agent-conversation.png)
+
+**Approve the shop inquiries**
+
+The guide lists the three shops and the conditions it will share. The visitor can confirm or change the request.
+
+![Approve the shop inquiries](docs/screenshots/agent-inquiry.png)
+
+**Compare the shop agents’ replies**
+
+One shop has seats, one is full, and one cannot accommodate the group. The visitor can open the available shop’s booking page.
+
+![Compare the shop agents’ replies](docs/screenshots/agent-comparison.png)
 
 > **Planned Merge into `takeshy/gemihub`**  
 > Because the main repository **[takeshy/gemihub](https://github.com/takeshy/gemihub)** is currently in code freeze for another hackathon submission, the town-portal and multi-shop AI federation features are being developed here first and will be merged into `takeshy/gemihub` once that review period concludes.

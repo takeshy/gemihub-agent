@@ -4,13 +4,27 @@
 
 自然な言葉で AI に頼むだけで個店が独自の Web サイトを持て、さらに「街案内 AI」が全店の AI や地域資料と連携して、訪れる人に合うお店や巡り方を音声・多言語でも案内できる、画一化しない街のポータルサイト **『gemihub』** の開発リポジトリです。
 
-![大倉山の街案内のトップページ](docs/screenshots/okurayama-town-guide.jpg)
+## 街案内 AI でお店を探す
 
-大倉山の街案内。訪問者はここから近隣のお店や地域の情報を AI に相談できます。
+以下はデモ用の空席・価格を使った相談例です。
 
-| AI にお店の希望を伝える | 店舗デザインを比較する |
-| --- | --- |
-| [![AI にお店の希望を伝える](apps/shop/public/manual/02-interview.jpg)](apps/shop/public/manual/02-interview.jpg) | [![店舗デザインを比較する](apps/shop/public/manual/61-design-compare.jpg)](apps/shop/public/manual/61-design-compare.jpg) |
+**街案内に希望を伝える**
+
+12名・19時・1人5,000円以内で、えびを避けたいと相談すると、街案内 AI が条件を記録します。
+
+![街案内に希望を伝える](docs/screenshots/agent-conversation.png)
+
+**問い合わせ先を確認する**
+
+街案内 AI が対象の3店と送る条件を表示し、利用者の承諾を待ちます。
+
+![問い合わせ先を確認する](docs/screenshots/agent-inquiry.png)
+
+**店舗エージェントの回答を比べる**
+
+空きあり・満席・予約不可を見比べ、条件に合う店の予約ページへ進めます。
+
+![店舗エージェントの回答を比べる](docs/screenshots/agent-comparison.png)
 
 > **今後の統合について（`takeshy/gemihub` への合流予定）**  
 > 本体である **[takeshy/gemihub](https://github.com/takeshy/gemihub)** は別ハッカソンの審査に伴うコードフリーズ（codefix）中のため、街のポータルおよび店舗 AI 連携機能は本リポジトリで先行開発しています。審査終了後、順次 `takeshy/gemihub` 本体へ合流・統合していく予定です。

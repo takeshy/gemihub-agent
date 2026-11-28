@@ -1,137 +1,139 @@
 # gemihub-agent
 
-[English](README.md) · [日本語](README_ja.md)
+[日本語](README.md) · [English](README_en.md)
 
-**gemihub** is a non-homogenizing local town portal where independent shops can build and run their own bespoke websites simply by talking to AI, and a town-guide AI coordinates across every shop's AI and local community documents to recommend places and itineraries via text, voice, and multiple languages.
+自然な言葉で AI に頼むだけで個店が独自の Web サイトを持て、さらに「街案内 AI」が全店の AI や地域資料と連携して、訪れる人に合うお店や巡り方を音声・多言語でも案内できる、画一化しない街のポータルサイト **『gemihub』** の開発リポジトリです。
 
-## Finding a table with the town guide
+## 街案内 AI でお店を探す
 
-This walkthrough uses the Japanese interface with sample availability and prices.
+以下はデモ用の空席・価格を使った相談例です。
 
-**Tell the town guide what you need**
+**街案内に希望を伝える**
 
-A visitor asks for dinner for 12 at 7 p.m., under ¥5,000 per person, and asks to avoid shrimp. The guide records the request.
+12名・19時・1人5,000円以内で、えびを避けたいと相談すると、街案内 AI が条件を記録します。
 
-![Tell the town guide what you need](docs/screenshots/agent-conversation.png)
+![街案内に希望を伝える](docs/screenshots/agent-conversation.png)
 
-**Approve the shop inquiries**
+**問い合わせ先を確認する**
 
-The guide lists the three shops and the conditions it will share. The visitor can confirm or change the request.
+街案内 AI が対象の3店と送る条件を表示し、利用者の承諾を待ちます。
 
-![Approve the shop inquiries](docs/screenshots/agent-inquiry.png)
+![問い合わせ先を確認する](docs/screenshots/agent-inquiry.png)
 
-**Compare the shop agents’ replies**
+**店舗エージェントの回答を比べる**
 
-One shop has seats, one is full, and one cannot accommodate the group. The visitor can open the available shop’s booking page.
+空きあり・満席・予約不可を見比べ、条件に合う店の予約ページへ進めます。
 
-![Compare the shop agents’ replies](docs/screenshots/agent-comparison.png)
+![店舗エージェントの回答を比べる](docs/screenshots/agent-comparison.png)
 
-> **Planned Merge into `takeshy/gemihub`**  
-> Because the main repository **[takeshy/gemihub](https://github.com/takeshy/gemihub)** is currently in code freeze for another hackathon submission, the town-portal and multi-shop AI federation features are being developed here first and will be merged into `takeshy/gemihub` once that review period concludes.
-
----
-
-## Key Features
-
-- **Conversational Storefront Builder (`apps/shop/`)**  
-  Restaurants, craft & stationery stores, salons, and other local businesses can generate and update custom-designed websites, menus, and booking flows using natural language and photos.
-  Public storefronts include schema.org JSON-LD for the business type, displayed hours, offerings and list prices.
-  Going live adds the storefront to the town guide. Owners can start over from Settings → Shop information.
-- **Town-Guide AI × Distributed Shop AIs**  
-  Given combined visitor constraints (date/time, party size, dietary restrictions, follow-up stops, etc.), the town-guide AI queries participating shops' read-only MCP agents upon user confirmation, compares availability and offerings, and suggests a multi-stop route.
-- **Voice & Multilingual Guidance**  
-  Visitors can consult the town guide and individual shop AIs via live voice conversation as well as multilingual text (e.g., English and Japanese).
-- **Local Document Retrieval (PDF, Markdown, etc.)**  
-  Town operators can upload and publish local notices, public facility guides, and event flyers (such as local festival PDFs) so the portal can answer community questions with source citations.
-- **Managed AI & BYOK Support**  
-  Runs out of the box with managed Gemini API access, while also allowing visitors to switch to **BYOK (Bring Your Own Key)** with their own API key.
-
-When managed voice AI is enabled, **Talk to AI** appears beside the heading at the top of both the town-guide and shop chat screens. It opens a compact voice panel at the bottom right while leaving the rest of the page usable; closing the panel or pressing Esc ends the microphone session. The button appears inside chat, and shop confirmations remain on screen. See [AI and voice settings](docs/managed-ai.md#親の音声会話).
+> **今後の統合について（`takeshy/gemihub` への合流予定）**\
+> 本体である **[takeshy/gemihub](https://github.com/takeshy/gemihub)** は別ハッカソンの審査に伴うコードフリーズ（codefix）中のため、街のポータルおよび店舗 AI 連携機能は本リポジトリで先行開発しています。審査終了後、順次 `takeshy/gemihub` 本体へ合流・統合していく予定です。
 
 ---
 
-## Core Stack
+## 主な特徴
+
+- **言葉と写真でつくる個店サイト（`apps/shop/`）**\
+  飲食店・雑貨店・サロンなどの店舗が、自然な言葉での指示や写真をもとに独自デザインの店舗ページ・メニュー・予約導線を作成・公開できます。
+  公開店舗ページは、業種と、ページに表示する営業時間・メニュー・商品・掲載価格を schema.org の JSON-LD で配信します。
+  本番公開した店舗は街案内に自動登録されます。店主は「設定 → お店の基本情報」からお店を最初から作り直せます。
+- **街案内 AI × 各店舗 AI のリアルタイム連携**\
+  日時・人数・避けたい食材・立ち寄り先などの複合条件に対し、街案内 AI が承諾のうえで各店舗のエージェント（読み取り専用 MCP）へ問い合わせ、空席や商品情報を比較して回遊プランを提案します。
+- **音声対話・多言語案内**\
+  チャットだけでなく音声会話や英語などの多言語でも、地域の案内や各店舗 AI への相談を行えます。
+- **地域資料（PDF / Markdown 等）の参照**\
+  地域のお知らせ・公共施設・イベント案内（例：地域イベントの開催案内 PDF）を取り込んで公開でき、お店以外の地域情報に関する質問にも資料名を添えて回答します。
+- **Managed AI / BYOK 両対応**\
+  標準の Gemini API 利用（Managed）に加え、訪問者が自身の API キーを設定して利用する **BYOK（Bring Your Own Key）** にも切り替えられます。
+
+運営の音声AIが有効なら、親・店舗ともAIチャット画面上部の見出し横に「音声で話す」を表示します。押すと右下に小さな音声パネルが開き、ほかの画面も操作できます。「閉じる」またはEscでマイク・音声接続を終了します。店舗の確認画面は画面上で操作し、確認後に音声モードへ戻ります。詳細は[AIと音声の設定](docs/managed-ai.md#親の音声会話)を参照してください。
+
+---
+
+## 主な使用技術
 
 - **Google Gemini API**
-  - Shop discovery & agent queries: `gemini-4-hydrogen` (low)
-  - Live voice interaction: `gemini-3.8-live`
-  - Storefront/theme and page HTML/CSS generation: `gemini-4-neon`
-  - Visual review and genre classification support
-- **Open Agentic Web** (built on [agentify-website](https://github.com/cognizant-ai-labs/agentic-web))  
-  Decentralized federation between the town portal and individual shop agents
-- **Runtime & Frontend**  
-  Node.js 24+ / TypeScript / React 19 / Vite (npm workspaces monorepo)
+  - 店舗検索・照会：`gemini-4-hydrogen`（low）
+  - 音声対話：`gemini-3.8-live`
+  - 個店テーマ・ページのHTML/CSS生成：`gemini-4-neon`
+  - 画面自動レビュー・ジャンル分類補助
+- **Open Agentic Web**（[agentify-website](https://github.com/cognizant-ai-labs/agentic-web) ベース）\
+  親ポータルと各店舗 AI 間の分散エージェント連携基盤
+- **ランタイム / フロントエンド**\
+  Node.js 24+ / TypeScript / React 19 / Vite（npm workspaces モノレポ）
 
 ---
 
-## Repository Structure
+## リポジトリ構成
 
-| Path | Purpose |
+| パス | 役割 |
 | --- | --- |
-| `site/` | Town-guide portal (public frontend and parent agent manifest/network) |
-| `apps/shop/` | Storefront builder, owner admin, and shop AI app (see [apps/shop/README.md](apps/shop/README.md)) |
-| `admin/` | Portal operator server (shop directory, local document uploads, AI page editor) |
-| `scripts/` | Build scripts and combined local demo runner |
-| `docs/` / `specs/` | Architecture notes, setup guides, and feature specifications |
+| `site/` | 街案内ポータル（公開フロントエンド・親エージェント定義） |
+| `apps/shop/` | 個店サイト生成・管理・店舗 AI アプリ（詳細: [apps/shop/README_ja.md](apps/shop/README_ja.md)） |
+| `admin/` | ポータル管理サーバー（登録店管理・地域資料アップロード・AI ページ編集） |
+| `scripts/` | ビルド・ローカル統合デモ起動スクリプト |
+| `docs/` / `specs/` | 機能仕様・設定ガイド |
 
 ---
 
-## Quick Start
+## クイックスタート
 
-### Prerequisites
-- **Node.js 24+**
+### 前提条件
+- **Node.js 24 以上**
 
-### 1. Install, Build & Test
+### 1. セットアップとビルド
 
 ```sh
 npm ci
-cp .env.example .env   # Set GEMINI_API_KEY and optional settings as needed
+cp .env.example .env   # 必要に応じて GEMINI_API_KEY 等を設定
 npm run build
 npm test
 ```
 
-### 2. Run the Combined Local Demo
+### 2. ローカル統合デモの起動
 
-Launch the town portal, portal admin server, and 3 demo restaurant storefronts together:
+親ポータル・管理画面・店舗デモ（飲食店 3 店舗）をまとめて起動できます。
 
 ```sh
 npm run dev:demo
 ```
 
-Default local endpoints:
-- Town-guide portal: **http://localhost:8090/**
-- Portal admin UI: **http://localhost:8091/**
-- Shop demo app: **http://127.0.0.1:3000/**
+起動後のアクセス先（既定ポート）：
+- 街案内ポータル: **http://localhost:8090/**
+- ポータル管理画面: **http://localhost:8091/**
+- 店舗デモアプリ: **http://127.0.0.1:3000/**
 
-> Override ports via `FINDER_PORT`, `ADMIN_PORT`, and `SHOP_PORT` (`Ctrl+C` stops all processes).
+> 環境変数 `FINDER_PORT` / `ADMIN_PORT` / `SHOP_PORT` でポート変更が可能です（`Ctrl+C` で一括停止）。
 
 ---
 
-## Common Commands
+## 主なコマンド
 
-| Command | Description |
+| コマンド | 内容 |
 | --- | --- |
-| `npm run build` | Build the town portal, admin UI, and shop app |
-| `npm run check` | Run type and build checks across workspaces |
-| `npm test` | Run unit tests for both the portal and shop app |
-| `npm start` | Start only the town portal (`http://localhost:8090/`) |
-| `npm run admin` | Start only the portal admin server (`http://127.0.0.1:8091/`) |
-| `npm run start:shop` / `npm run dev:shop` | Start / dev-watch only the shop app |
-| `npm run storybook` | Launch Storybook for portal and storefront UI |
-| `npm run dev:demo` | Launch the combined portal, admin, and demo shop servers |
+| `npm run build` | 親ポータル・管理画面・店舗アプリをビルド |
+| `npm run check` | 型チェック・構成チェックを実行 |
+| `npm test` | 親ポータルおよび店舗アプリのテストを実行 |
+| `npm start` | 親ポータルのみを起動（`http://localhost:8090/`） |
+| `npm run admin` | 管理画面サーバーのみを起動（`http://127.0.0.1:8091/`） |
+| `npm run start:shop` / `npm run dev:shop` | 店舗アプリ単体の起動 / 開発モード起動 |
+| `npm run storybook` | 店舗・ポータル UI の Storybook を起動 |
+| `npm run dev:demo` | 親ポータル・管理画面・店舗デモを一括起動 |
 
 ---
 
-## Documentation
+## ドキュメント
 
-- Shop app details: [apps/shop/README.md](apps/shop/README.md) ([日本語](apps/shop/README_ja.md))
-- Managed AI vs. BYOK & voice setup: [docs/managed-ai.md](docs/managed-ai.md)
-- Authentication & Cloud Storage: [docs/storage-auth.md](docs/storage-auth.md)
-- Monorepo overview: [docs/monorepo.md](docs/monorepo.md)
-- Specifications: [Shop Introduction](specs/SHOP_INTRODUCTION_SPEC.md) / [Restaurant Booking](specs/restaurant-spec.md) / [Admin UI](specs/ADMIN_SPEC.md)
+より詳しい仕様や設定方法は各ドキュメントを参照してください。
+
+- 店舗アプリの詳しい説明: [apps/shop/README_ja.md](apps/shop/README_ja.md)
+- AI モード（Managed / BYOK）と音声設定: [docs/managed-ai.md](docs/managed-ai.md)
+- 認証・保存先（Google ログイン / Cloud Storage）: [docs/storage-auth.md](docs/storage-auth.md)
+- モノレポ構成について: [docs/monorepo.md](docs/monorepo.md)
+- 機能仕様: [店舗紹介仕様](specs/SHOP_INTRODUCTION_SPEC.md) / [飲食店予約仕様](specs/restaurant-spec.md) / [管理画面仕様](specs/ADMIN_SPEC.md)
 
 ---
 
-## Third-Party Notices
+## サードパーティ表記
 
-Parts of the portal and agent runtime (`site/runtime/` and `vendor/agentify-website/`) incorporate [agentify-website](https://github.com/cognizant-ai-labs/agentic-web) by Cognizant AI Labs under the Apache License 2.0.
+親ポータルおよびエージェント連携ランタイムの一部（`site/runtime/`・`vendor/agentify-website/`）には、Cognizant AI Labs の [agentify-website](https://github.com/cognizant-ai-labs/agentic-web)（Apache License 2.0）を利用しています。

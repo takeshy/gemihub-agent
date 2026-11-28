@@ -1,0 +1,137 @@
+# gemihub-agent
+
+[日本語](README.md) · [English](README_en.md)
+
+**gemihub** is a non-homogenizing local town portal where independent shops can build and run their own bespoke websites simply by talking to AI, and a town-guide AI coordinates across every shop's AI and local community documents to recommend places and itineraries via text, voice, and multiple languages.
+
+## Finding a table with the town guide
+
+This walkthrough uses the Japanese interface with sample availability and prices.
+
+**Tell the town guide what you need**
+
+A visitor asks for dinner for 12 at 7 p.m., under ¥5,000 per person, and asks to avoid shrimp. The guide records the request.
+
+![Tell the town guide what you need](docs/screenshots/agent-conversation.png)
+
+**Approve the shop inquiries**
+
+The guide lists the three shops and the conditions it will share. The visitor can confirm or change the request.
+
+![Approve the shop inquiries](docs/screenshots/agent-inquiry.png)
+
+**Compare the shop agents’ replies**
+
+One shop has seats, one is full, and one cannot accommodate the group. The visitor can open the available shop’s booking page.
+
+![Compare the shop agents’ replies](docs/screenshots/agent-comparison.png)
+
+> **Planned Merge into `takeshy/gemihub`**  
+> Because the main repository **[takeshy/gemihub](https://github.com/takeshy/gemihub)** is currently in code freeze for another hackathon submission, the town-portal and multi-shop AI federation features are being developed here first and will be merged into `takeshy/gemihub` once that review period concludes.
+
+---
+
+## Key Features
+
+- **Conversational Storefront Builder (`apps/shop/`)**  
+  Restaurants, craft & stationery stores, salons, and other local businesses can generate and update custom-designed websites, menus, and booking flows using natural language and photos.
+  Public storefronts include schema.org JSON-LD for the business type, displayed hours, offerings and list prices.
+  Going live adds the storefront to the town guide. Owners can start over from Settings → Shop information.
+- **Town-Guide AI × Distributed Shop AIs**  
+  Given combined visitor constraints (date/time, party size, dietary restrictions, follow-up stops, etc.), the town-guide AI queries participating shops' read-only MCP agents upon user confirmation, compares availability and offerings, and suggests a multi-stop route.
+- **Voice & Multilingual Guidance**  
+  Visitors can consult the town guide and individual shop AIs via live voice conversation as well as multilingual text (e.g., English and Japanese).
+- **Local Document Retrieval (PDF, Markdown, etc.)**  
+  Town operators can upload and publish local notices, public facility guides, and event flyers (such as local festival PDFs) so the portal can answer community questions with source citations.
+- **Managed AI & BYOK Support**  
+  Runs out of the box with managed Gemini API access, while also allowing visitors to switch to **BYOK (Bring Your Own Key)** with their own API key.
+
+When managed voice AI is enabled, **Talk to AI** appears beside the heading at the top of both the town-guide and shop chat screens. It opens a compact voice panel at the bottom right while leaving the rest of the page usable; closing the panel or pressing Esc ends the microphone session. The button appears inside chat, and shop confirmations remain on screen. See [AI and voice settings](docs/managed-ai.md#親の音声会話).
+
+---
+
+## Core Stack
+
+- **Google Gemini API**
+  - Shop discovery & agent queries: `gemini-4-hydrogen` (low)
+  - Live voice interaction: `gemini-3.8-live`
+  - Storefront/theme and page HTML/CSS generation: `gemini-4-neon`
+  - Visual review and genre classification support
+- **Open Agentic Web** (built on [agentify-website](https://github.com/cognizant-ai-labs/agentic-web))  
+  Decentralized federation between the town portal and individual shop agents
+- **Runtime & Frontend**  
+  Node.js 24+ / TypeScript / React 19 / Vite (npm workspaces monorepo)
+
+---
+
+## Repository Structure
+
+| Path | Purpose |
+| --- | --- |
+| `site/` | Town-guide portal (public frontend and parent agent manifest/network) |
+| `apps/shop/` | Storefront builder, owner admin, and shop AI app (see [apps/shop/README.md](apps/shop/README.md)) |
+| `admin/` | Portal operator server (shop directory, local document uploads, AI page editor) |
+| `scripts/` | Build scripts and combined local demo runner |
+| `docs/` / `specs/` | Architecture notes, setup guides, and feature specifications |
+
+---
+
+## Quick Start
+
+### Prerequisites
+- **Node.js 24+**
+
+### 1. Install, Build & Test
+
+```sh
+npm ci
+cp .env.example .env   # Set GEMINI_API_KEY and optional settings as needed
+npm run build
+npm test
+```
+
+### 2. Run the Combined Local Demo
+
+Launch the town portal, portal admin server, and 3 demo restaurant storefronts together:
+
+```sh
+npm run dev:demo
+```
+
+Default local endpoints:
+- Town-guide portal: **http://localhost:8090/**
+- Portal admin UI: **http://localhost:8091/**
+- Shop demo app: **http://127.0.0.1:3000/**
+
+> Override ports via `FINDER_PORT`, `ADMIN_PORT`, and `SHOP_PORT` (`Ctrl+C` stops all processes).
+
+---
+
+## Common Commands
+
+| Command | Description |
+| --- | --- |
+| `npm run build` | Build the town portal, admin UI, and shop app |
+| `npm run check` | Run type and build checks across workspaces |
+| `npm test` | Run unit tests for both the portal and shop app |
+| `npm start` | Start only the town portal (`http://localhost:8090/`) |
+| `npm run admin` | Start only the portal admin server (`http://127.0.0.1:8091/`) |
+| `npm run start:shop` / `npm run dev:shop` | Start / dev-watch only the shop app |
+| `npm run storybook` | Launch Storybook for portal and storefront UI |
+| `npm run dev:demo` | Launch the combined portal, admin, and demo shop servers |
+
+---
+
+## Documentation
+
+- Shop app details: [apps/shop/README.md](apps/shop/README.md) ([日本語](apps/shop/README_ja.md))
+- Managed AI vs. BYOK & voice setup: [docs/managed-ai.md](docs/managed-ai.md)
+- Authentication & Cloud Storage: [docs/storage-auth.md](docs/storage-auth.md)
+- Monorepo overview: [docs/monorepo.md](docs/monorepo.md)
+- Specifications: [Shop Introduction](specs/SHOP_INTRODUCTION_SPEC.md) / [Restaurant Booking](specs/restaurant-spec.md) / [Admin UI](specs/ADMIN_SPEC.md)
+
+---
+
+## Third-Party Notices
+
+Parts of the portal and agent runtime (`site/runtime/` and `vendor/agentify-website/`) incorporate [agentify-website](https://github.com/cognizant-ai-labs/agentic-web) by Cognizant AI Labs under the Apache License 2.0.

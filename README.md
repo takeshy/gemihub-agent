@@ -4,6 +4,14 @@
 
 **gemihub** is a non-homogenizing local town portal where independent shops can build and run their own bespoke websites simply by talking to AI, and a town-guide AI coordinates across every shop's AI and local community documents to recommend places and itineraries via text, voice, and multiple languages.
 
+![Home page of the Okurayama town guide](docs/screenshots/okurayama-town-guide.jpg)
+
+The Okurayama town guide (Japanese demo), where visitors can ask about local shops and community information.
+
+| Describe the shop to the AI | Compare storefront designs |
+| --- | --- |
+| [![Describe the shop to the AI](apps/shop/public/manual/en/02-interview.jpg)](apps/shop/public/manual/en/02-interview.jpg) | [![Compare storefront designs](apps/shop/public/manual/en/61-design-compare.jpg)](apps/shop/public/manual/en/61-design-compare.jpg) |
+
 > **Planned Merge into `takeshy/gemihub`**  
 > Because the main repository **[takeshy/gemihub](https://github.com/takeshy/gemihub)** is currently in code freeze for another hackathon submission, the town-portal and multi-shop AI federation features are being developed here first and will be merged into `takeshy/gemihub` once that review period concludes.
 

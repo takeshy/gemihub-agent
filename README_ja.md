@@ -4,6 +4,14 @@
 
 自然な言葉で AI に頼むだけで個店が独自の Web サイトを持て、さらに「街案内 AI」が全店の AI や地域資料と連携して、訪れる人に合うお店や巡り方を音声・多言語でも案内できる、画一化しない街のポータルサイト **『gemihub』** の開発リポジトリです。
 
+![大倉山の街案内のトップページ](docs/screenshots/okurayama-town-guide.jpg)
+
+大倉山の街案内。訪問者はここから近隣のお店や地域の情報を AI に相談できます。
+
+| AI にお店の希望を伝える | 店舗デザインを比較する |
+| --- | --- |
+| [![AI にお店の希望を伝える](apps/shop/public/manual/02-interview.jpg)](apps/shop/public/manual/02-interview.jpg) | [![店舗デザインを比較する](apps/shop/public/manual/61-design-compare.jpg)](apps/shop/public/manual/61-design-compare.jpg) |
+
 > **今後の統合について（`takeshy/gemihub` への合流予定）**  
 > 本体である **[takeshy/gemihub](https://github.com/takeshy/gemihub)** は別ハッカソンの審査に伴うコードフリーズ（codefix）中のため、街のポータルおよび店舗 AI 連携機能は本リポジトリで先行開発しています。審査終了後、順次 `takeshy/gemihub` 本体へ合流・統合していく予定です。
 
